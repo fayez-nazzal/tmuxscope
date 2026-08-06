@@ -34,6 +34,12 @@ test("resolve --json reports the matched pattern", () => {
   expect(JSON.parse(result.out)).toMatchObject({ scope: "api", matched: "~/code/api-service*" });
 });
 
+test("resolve --json with no path argument defaults to the current working directory", () => {
+  const config = configFile("api = ~/code/api-service*\n");
+  const result = run(["resolve", "--json"], config);
+  expect(JSON.parse(result.out)).toMatchObject({ path: process.cwd() });
+});
+
 test("globs prints the zsh patterns of the scope owning a path", () => {
   const config = configFile("web = ~/webapp\n");
   expect(run(["globs", `${HOME}/webapp`], config).out).toBe(`${HOME}/webapp ${HOME}/webapp/*`);

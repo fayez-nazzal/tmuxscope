@@ -5,6 +5,7 @@ import { DEFAULT_CONFIG_PATH, loadConfig, ConfigError, MISC } from "./config.ts"
 import type { Scope } from "./config.ts";
 import { resolveScope, zshGlobs } from "./match.ts";
 import { routePlan, sessionForScope } from "./plan.ts";
+import type { RouteInput } from "./plan.ts";
 import { tmux } from "./tmux.ts";
 
 export const VERSION = "0.1.0";
@@ -64,14 +65,10 @@ function cmdRoute(path: string, scopes: Scope[]) {
   if (currentWindow) {
     currentSession = currentWindow.session;
   }
-  const plan = routePlan({
-    target: path,
-    originPath,
-    paneWork: tmux.paneWork(paneId),
-    panesInSession: tmux.panesInSession(currentSession),
-    scopes,
-    state,
-  });
+  const paneWork = tmux.paneWork(paneId);
+  const panesInSession = tmux.panesInSession(currentSession);
+  const routeInput: RouteInput = { target: path, originPath, paneWork, panesInSession, scopes, state };
+  const plan = routePlan(routeInput);
   for (const action of plan.actions) {
     tmux.apply(action);
   }
@@ -87,27 +84,32 @@ function cmdRoute(path: string, scopes: Scope[]) {
 }
 
 function main() {
-  const args = process.argv.slice(2);
-  const command = args[0] || "";
-  const json = args.includes("--json");
-  if (command === "" || command === "-h" || command === "--help") {
-    process.stdout.write(HELP);
-    process.exit(0);
-  }
-  if (command === "-v" || command === "--version") {
+  const rawArgs = process.argv.slice(2);
+  const flags = rawArgs.filter((arg) => arg.startsWith("-"));
+  const positionals = rawArgs.filter((arg) => !arg.startsWith("-"));
+  const command = positionals[0] || "";
+  const json = flags.includes("--json");
+  const wantsVersion = flags.includes("-v") || flags.includes("--version");
+  const wantsHelp = flags.includes("-h") || flags.includes("--help");
+  if (wantsVersion) {
     process.stdout.write(`${VERSION}\n`);
     process.exit(0);
   }
+  if (command === "" || wantsHelp) {
+    process.stdout.write(HELP);
+    process.exit(0);
+  }
+  const scopesPath = configPath();
   let scopes: Scope[] = [];
   try {
-    scopes = loadConfig(configPath());
+    scopes = loadConfig(scopesPath);
   } catch (error) {
     if (error instanceof ConfigError) {
-      fail(`${configPath()} ${error.message}`, 2);
+      fail(`${scopesPath} ${error.message}`, 2);
     }
     throw error;
   }
-  const path = args[1] || process.cwd();
+  const path = positionals[1] || process.cwd();
   if (command === "resolve") {
     cmdResolve(path, scopes, json);
   } else if (command === "globs") {
