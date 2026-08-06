@@ -4,7 +4,7 @@ import { writeFileSync } from "node:fs";
 import { DEFAULT_CONFIG_PATH, loadConfig, ConfigError, MISC } from "./config.ts";
 import type { Scope } from "./config.ts";
 import { resolveScope, zshGlobs } from "./match.ts";
-import { routePlan, sessionForScope } from "./plan.ts";
+import { adoptPlan, routePlan, sessionForScope } from "./plan.ts";
 import type { RouteInput } from "./plan.ts";
 import { tmux } from "./tmux.ts";
 
@@ -16,6 +16,7 @@ USAGE
   tmuxscope resolve <path> [--json]   print the scope owning a path
   tmuxscope globs <path>              print the zsh patterns of that scope
   tmuxscope route <path>              hook entry point for a cd that left the scope
+  tmuxscope adopt <session-id>        hook entry point for a new session
   tmuxscope -h | --help
   tmuxscope -v | --version
 
@@ -83,6 +84,23 @@ function cmdRoute(path: string, scopes: Scope[]) {
   }
 }
 
+function cmdAdopt(sessionId: string, scopes: Scope[]) {
+  const state = tmux.state();
+  const session = state.sessions.find((entry) => entry.id === sessionId);
+  if (session) {
+    const window = state.windows.find((entry) => entry.session === session.name);
+    if (window) {
+      const plan = adoptPlan({ sessionId, sessionName: session.name, windowId: window.id, windowPath: window.path, scopes, state });
+      for (const action of plan.actions) {
+        tmux.apply(action);
+      }
+      if (plan.message) {
+        tmux.message(plan.message);
+      }
+    }
+  }
+}
+
 function main() {
   const rawArgs = process.argv.slice(2);
   const flags = rawArgs.filter((arg) => arg.startsWith("-"));
@@ -116,6 +134,8 @@ function main() {
     cmdGlobs(path, scopes);
   } else if (command === "route") {
     cmdRoute(path, scopes);
+  } else if (command === "adopt") {
+    cmdAdopt(positionals[1] || "", scopes);
   } else {
     fail(`unknown command ${command}, try --help`, 2);
   }
