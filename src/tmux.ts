@@ -71,7 +71,6 @@ export function commandFor(action: Action): string[] {
     command = ["rename-session", "-t", action.id, action.name];
   }
   if (command.length === 0) {
-    const exhaustive: never = action;
     throw new Error(`Unhandled action kind`);
   }
   return command;
@@ -84,7 +83,10 @@ export function run(args: string[]): string {
     output = result.stdout;
   }
   if (result.status !== 0) {
-    const stderr = typeof result.stderr === "string" ? result.stderr : "";
+    let stderr = "";
+    if (typeof result.stderr === "string") {
+      stderr = result.stderr;
+    }
     if (stderr.includes("no server running")) {
       output = "";
     } else {
