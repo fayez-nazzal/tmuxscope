@@ -33,3 +33,22 @@ test("commandFor builds a switch, a move and a rename", () => {
   expect(commandFor({ kind: "move-window", windowId: "@4", session: "web" })).toEqual(["move-window", "-s", "@4", "-t", "web:"]);
   expect(commandFor({ kind: "rename-session", id: "$2", name: "tools" })).toEqual(["rename-session", "-t", "$2", "tools"]);
 });
+
+test("parseSessions skips incomplete lines", () => {
+  const text = "$0\tapi\t3\t1\n$1\tmain\n";
+  expect(parseSessions(text)).toEqual([
+    { id: "$0", name: "api", windows: 3, attached: true },
+  ]);
+});
+
+test("parseWindows skips incomplete lines", () => {
+  const text = "@4\t2\tapi\t/path\n@5\t3\n";
+  expect(parseWindows(text)).toEqual([
+    { id: "@4", index: 2, session: "api", path: "/path" },
+  ]);
+});
+
+test("commandFor throws on unknown action kind", () => {
+  const action: any = { kind: "unknown" };
+  expect(() => commandFor(action)).toThrow();
+});

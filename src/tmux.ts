@@ -23,8 +23,14 @@ export function parseSessions(text: string): SessionInfo[] {
   const sessions: SessionInfo[] = [];
   for (const line of text.split("\n")) {
     if (line.length > 0) {
-      const [id, name, windows, attached] = line.split("\t");
-      sessions.push({ id: id!, name: name!, windows: Number(windows), attached: attached === "1" });
+      const parts = line.split("\t");
+      if (parts.length >= 4) {
+        const id = parts[0];
+        const name = parts[1];
+        const windows = Number(parts[2]);
+        const attached = parts[3] === "1";
+        sessions.push({ id, name, windows, attached });
+      }
     }
   }
   return sessions;
@@ -34,8 +40,14 @@ export function parseWindows(text: string): WindowInfo[] {
   const windows: WindowInfo[] = [];
   for (const line of text.split("\n")) {
     if (line.length > 0) {
-      const [id, index, session, path] = line.split("\t");
-      windows.push({ id: id!, index: Number(index), session: session!, path: path! });
+      const parts = line.split("\t");
+      if (parts.length >= 4) {
+        const id = parts[0];
+        const index = Number(parts[1]);
+        const session = parts[2];
+        const path = parts[3];
+        windows.push({ id, index, session, path });
+      }
     }
   }
   return windows;
@@ -58,14 +70,26 @@ export function commandFor(action: Action): string[] {
   if (action.kind === "rename-session") {
     command = ["rename-session", "-t", action.id, action.name];
   }
+  if (command.length === 0) {
+    const exhaustive: never = action;
+    throw new Error(`Unhandled action kind`);
+  }
   return command;
 }
 
-function run(args: string[]): string {
+export function run(args: string[]): string {
   const result = spawnSync("tmux", args, { encoding: "utf8" });
   let output = "";
   if (result.status === 0 && typeof result.stdout === "string") {
     output = result.stdout;
+  }
+  if (result.status !== 0) {
+    const stderr = typeof result.stderr === "string" ? result.stderr : "";
+    if (stderr.includes("no server running")) {
+      output = "";
+    } else {
+      throw new Error(`tmux ${args.join(" ")} failed: ${stderr}`);
+    }
   }
   return output;
 }
