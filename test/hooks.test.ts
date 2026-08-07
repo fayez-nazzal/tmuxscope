@@ -30,3 +30,39 @@ test("hook zsh prints the snippet", () => {
   expect(result.stdout.toString()).toContain("_tmuxscope_chpwd");
   expect(result.exitCode).toBe(0);
 });
+
+test("hook with a missing argument exits 2", () => {
+  const result = Bun.spawnSync(["bun", CLI, "hook"]);
+  expect(result.exitCode).toBe(2);
+});
+
+test("hook with an unknown argument exits 2", () => {
+  const result = Bun.spawnSync(["bun", CLI, "hook", "bogus"]);
+  expect(result.exitCode).toBe(2);
+});
+
+function classifyPreexec(command: string): string {
+  const script = `
+${ZSH_HOOK}
+tmux() {
+  if [[ "$3" == "@tmuxscope_work" ]]; then
+    print -r -- WORK
+  fi
+}
+_tmuxscope_preexec "$1"
+`;
+  const result = Bun.spawnSync(["zsh", "-c", script, "--", command]);
+  let verdict = "free";
+  if (result.stdout.toString().includes("WORK")) {
+    verdict = "work";
+  }
+  return verdict;
+}
+
+test("preexec marks work by shell metacharacters, not by the leading word", () => {
+  expect(classifyPreexec("cd /tmp")).toBe("free");
+  expect(classifyPreexec("z myproject")).toBe("free");
+  expect(classifyPreexec("cd /tmp && rm -rf important")).toBe("work");
+  expect(classifyPreexec("cd /tmp; npm test")).toBe("work");
+  expect(classifyPreexec("npm test")).toBe("work");
+});

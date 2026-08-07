@@ -2,6 +2,7 @@ export const ZSH_HOOK = `autoload -Uz add-zsh-hook
 
 _tmuxscope_preexec() {
   case "$1" in
+    *'&&'*|*'||'*|*';'*|*'|'*|*$'\\n'*) ;;
     cd|cd\\ *|z|z\\ *|pushd|pushd\\ *|popd|popd\\ *) return ;;
   esac
   tmux set-option -p @tmuxscope_work 1 2>/dev/null
