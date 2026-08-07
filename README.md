@@ -30,6 +30,15 @@ On overlap the longest pattern wins. Anything unmatched belongs to `misc`.
 
 Set `TMUXSCOPE_OFF=1` to disable routing in one shell.
 
+`go` starts the session in a directory that belongs to the scope. If a star pattern
+matches nothing on disk it says so and creates nothing.
+
+`repair` only touches the sessions `doctor` names. A session it reports as clean keeps
+its name and its windows.
+
+`globs` is the older name of `rules`, kept so a shell opened before the rename keeps
+working until it is restarted.
+
 ## Limits
 
 Paths are compared as written, with no symlink resolution. zsh reports the logical
