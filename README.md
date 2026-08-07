@@ -33,22 +33,9 @@ Set `TMUXSCOPE_OFF=1` to disable routing in one shell.
 
     bun test
 
-## Known issues
-
-Live verification against a real tmux server (see
-`.superpowers/sdd/2026-08-06-tmuxscope/task-9-report.md`) found two bugs in the
-hook-triggered paths that unit tests, which mock tmux state, did not catch:
-
-- `tmuxscope route` (`src/cli.ts`) queries tmux state after the shell has
-  already `cd`ed, so the origin pane's own window can already report the
-  target path. This makes `route` either misattribute the destination to the
-  origin session, or crash with `can't find window: misc` when the origin
-  session has only one window.
-- The installed tmux hook (`src/hooks.ts` `TMUX_HOOK`) passes `#{session_id}`
-  through `run-shell`, which executes via a shell. Tmux session ids look like
-  `$1`, `$2`, ..., so the shell reinterprets that as an empty positional
-  parameter. `tmuxscope adopt` never receives a real session id, so new and
-  duplicate sessions are never adopted automatically.
-
-`doctor` and `repair` were verified clean against real tmux state and are not
-affected.
+Live verification against a real, isolated tmux server exercised routing, scratch
+pane cleanup, session creation, duplicate merging, and `doctor`, end to end. See
+`.superpowers/sdd/2026-08-06-tmuxscope/task-9-report.md` for the full log, including
+two hook-triggered bugs that were found and fixed along the way (`route` mis-locating
+the origin pane, and the tmux hook losing the session id to shell positional-parameter
+expansion).
