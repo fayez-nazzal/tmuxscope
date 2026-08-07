@@ -1,7 +1,7 @@
 import { MISC } from "./config.ts";
 import type { Scope } from "./config.ts";
 import { resolveScope } from "./match.ts";
-import type { Action, TmuxState } from "./tmux.ts";
+import type { Action, SessionInfo, TmuxState } from "./tmux.ts";
 
 export type RouteInput = {
   target: string;
@@ -162,22 +162,56 @@ export function doctorReport(state: TmuxState, scopes: Scope[]): Report {
   return report;
 }
 
-function homeOwners(state: TmuxState, scopes: Scope[]): Map<string, string> {
-  const owners = new Map<string, string>();
-  for (const session of state.sessions) {
-    const home = scopeOfSession(state, scopes, session.name);
-    const current = owners.get(home);
-    let winner = session.name;
-    if (current) {
-      winner = current;
-      const holder = state.sessions.find((entry) => entry.name === current);
-      if (holder && !holder.attached && session.attached) {
-        winner = session.name;
-      }
-    }
-    owners.set(home, winner);
+type Destination = { id: string; name: string };
+type Move = { windowId: string; from: string; destination: Destination };
+type Ordering = { actions: Action[]; stuck: boolean };
+
+function reportedNames(report: Report): Set<string> {
+  const names = new Set<string>();
+  for (const mixed of report.mixed) {
+    names.add(mixed.session);
   }
-  return owners;
+  for (const split of report.split) {
+    for (const name of split.sessions) {
+      names.add(name);
+    }
+  }
+  return names;
+}
+
+function ownerRank(session: SessionInfo, scope: string): number {
+  let rank = 0;
+  if (session.name === scope) {
+    rank = rank + 1;
+  }
+  if (session.attached) {
+    rank = rank + 2;
+  }
+  return rank;
+}
+
+function majorityOwner(scope: string, state: TmuxState, scopes: Scope[], claimed: Set<string>): SessionInfo | null {
+  let owner: SessionInfo | null = null;
+  let best = -1;
+  for (const session of state.sessions) {
+    const free = !claimed.has(session.id);
+    const holds = scopeOfSession(state, scopes, session.name) === scope;
+    const rank = ownerRank(session, scope);
+    if (free && holds && rank > best) {
+      best = rank;
+      owner = session;
+    }
+  }
+  return owner;
+}
+
+function namedOwner(scope: string, state: TmuxState, reported: Set<string>, claimed: Set<string>): SessionInfo | null {
+  let owner: SessionInfo | null = null;
+  const named = state.sessions.find((session) => session.name === scope);
+  if (named && reported.has(named.name) && !claimed.has(named.id)) {
+    owner = named;
+  }
+  return owner;
 }
 
 function finalName(name: string, renames: Map<string, string>): string {
@@ -199,52 +233,132 @@ function freeName(scope: string, taken: Set<string>): string {
   return name;
 }
 
-export function repairPlan(report: Report, state: TmuxState, scopes: Scope[]): Action[] {
-  const actions: Action[] = [];
-  if (report.problems > 0) {
-    const owners = homeOwners(state, scopes);
-    const claimed = new Set<string>(owners.values());
-    const creations = new Map<string, string>();
-    for (const window of state.windows) {
-      const scope = resolveScope(window.path, scopes).scope;
-      const owned = owners.has(scope) || creations.has(scope);
-      if (!owned) {
-        const free = state.sessions.find((session) => session.name === scope && !claimed.has(session.name));
-        if (free) {
-          owners.set(scope, free.name);
-          claimed.add(free.name);
-        } else {
-          creations.set(scope, window.path);
+function windowCounts(state: TmuxState): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const session of state.sessions) {
+    counts.set(session.id, state.windows.filter((window) => window.session === session.name).length);
+  }
+  return counts;
+}
+
+function countOf(counts: Map<string, number>, id: string): number {
+  let count = 0;
+  const held = counts.get(id);
+  if (held) {
+    count = held;
+  }
+  return count;
+}
+
+function needsFilling(counts: Map<string, number>, pending: Move[], id: string): boolean {
+  const leaving = pending.filter((move) => move.from === id).length;
+  return leaving > 0 && leaving >= countOf(counts, id);
+}
+
+function orderedMoves(moves: Move[], counts: Map<string, number>): Ordering {
+  const ordering: Ordering = { actions: [], stuck: false };
+  const pending = moves.slice();
+  while (pending.length > 0 && !ordering.stuck) {
+    let picked = -1;
+    let bestRank = -1;
+    for (let index = 0; index < pending.length; index++) {
+      const move = pending[index]!;
+      const alive = countOf(counts, move.destination.id) > 0;
+      const awaited = pending.some((other) => other.destination.id === move.from);
+      const survives = countOf(counts, move.from) > 1 || !awaited;
+      let rank = -1;
+      if (alive && survives) {
+        rank = 0;
+        if (needsFilling(counts, pending, move.destination.id)) {
+          rank = 1;
         }
       }
-    }
-    const renames = new Map<string, string>();
-    for (const [scope, name] of owners) {
-      const holder = state.sessions.find((session) => session.name === name);
-      const twin = state.sessions.some((session) => session.name === scope);
-      if (holder && name !== scope && !twin) {
-        renames.set(name, scope);
-        actions.push({ kind: "rename-session", id: holder.id, name: scope });
+      if (rank > bestRank) {
+        bestRank = rank;
+        picked = index;
       }
     }
-    const taken = new Set<string>(state.sessions.map((session) => finalName(session.name, renames)));
-    const destinations = new Map<string, string>();
-    for (const [scope, name] of owners) {
-      destinations.set(scope, finalName(name, renames));
+    if (picked === -1) {
+      ordering.stuck = true;
+    } else {
+      const move = pending.splice(picked, 1)[0]!;
+      counts.set(move.from, countOf(counts, move.from) - 1);
+      counts.set(move.destination.id, countOf(counts, move.destination.id) + 1);
+      ordering.actions.push({ kind: "move-window", windowId: move.windowId, session: move.destination.name });
     }
-    for (const [scope, cwd] of creations) {
-      const name = freeName(scope, taken);
-      taken.add(name);
-      destinations.set(scope, name);
-      actions.push({ kind: "new-session", name, cwd });
-    }
-    for (const window of state.windows) {
-      const scope = resolveScope(window.path, scopes).scope;
-      const destination = destinations.get(scope);
-      const holder = finalName(window.session, renames);
-      if (destination && destination !== holder) {
-        actions.push({ kind: "move-window", windowId: window.id, session: destination });
+  }
+  for (const move of pending) {
+    ordering.actions.push({ kind: "move-window", windowId: move.windowId, session: move.destination.name });
+  }
+  return ordering;
+}
+
+function buildRepair(report: Report, state: TmuxState, scopes: Scope[], reuseDrained: boolean): Ordering {
+  const reported = reportedNames(report);
+  const strays = state.windows.filter((window) => reported.has(window.session));
+  const owners = new Map<string, SessionInfo>();
+  const creations = new Map<string, string>();
+  const claimed = new Set<string>();
+  for (const window of strays) {
+    const scope = resolveScope(window.path, scopes).scope;
+    const decided = owners.has(scope) || creations.has(scope);
+    if (!decided) {
+      let owner = majorityOwner(scope, state, scopes, claimed);
+      if (!owner && reuseDrained) {
+        owner = namedOwner(scope, state, reported, claimed);
       }
+      if (owner) {
+        claimed.add(owner.id);
+        owners.set(scope, owner);
+      } else {
+        creations.set(scope, window.path);
+      }
+    }
+  }
+  const actions: Action[] = [];
+  const renames = new Map<string, string>();
+  for (const [scope, owner] of owners) {
+    const twin = state.sessions.some((session) => session.name === scope);
+    const mine = reported.has(owner.name);
+    if (mine && owner.name !== scope && !twin) {
+      renames.set(owner.name, scope);
+      actions.push({ kind: "rename-session", id: owner.id, name: scope });
+    }
+  }
+  const taken = new Set<string>(state.sessions.map((session) => finalName(session.name, renames)));
+  const destinations = new Map<string, Destination>();
+  for (const [scope, owner] of owners) {
+    destinations.set(scope, { id: owner.id, name: finalName(owner.name, renames) });
+  }
+  const counts = windowCounts(state);
+  for (const [scope, cwd] of creations) {
+    const name = freeName(scope, taken);
+    const id = `new:${name}`;
+    taken.add(name);
+    destinations.set(scope, { id, name });
+    counts.set(id, 1);
+    actions.push({ kind: "new-session", name, cwd });
+  }
+  const moves: Move[] = [];
+  for (const window of strays) {
+    const scope = resolveScope(window.path, scopes).scope;
+    const destination = destinations.get(scope);
+    const holder = state.sessions.find((session) => session.name === window.session);
+    if (destination && holder && destination.id !== holder.id) {
+      moves.push({ windowId: window.id, from: holder.id, destination });
+    }
+  }
+  const ordering = orderedMoves(moves, counts);
+  return { actions: [...actions, ...ordering.actions], stuck: ordering.stuck };
+}
+
+export function repairPlan(report: Report, state: TmuxState, scopes: Scope[]): Action[] {
+  let actions: Action[] = [];
+  if (report.problems > 0) {
+    const preferred = buildRepair(report, state, scopes, true);
+    actions = preferred.actions;
+    if (preferred.stuck) {
+      actions = buildRepair(report, state, scopes, false).actions;
     }
   }
   return actions;
