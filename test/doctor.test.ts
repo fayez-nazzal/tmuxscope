@@ -63,3 +63,37 @@ test("repair creates the owning session when it does not exist", () => {
 test("repair folds a split scope into the attached session", () => {
   expect(repairPlan(doctorReport(SPLIT, SCOPES), SPLIT, SCOPES)).toEqual([{ kind: "move-window", windowId: "@2", session: "api" }]);
 });
+
+test("repair does not move a window twice when its session is both mixed and part of a split scope", () => {
+  const state: TmuxState = {
+    sessions: [
+      { id: "$0", name: "db", windows: 3, attached: false },
+      { id: "$1", name: "api2", windows: 1, attached: true },
+    ],
+    windows: [
+      { id: "@0", index: 1, session: "db", path: "/w/api-service" },
+      { id: "@1", index: 2, session: "db", path: "/w/api-service.tasks-1" },
+      { id: "@2", index: 3, session: "db", path: "/w/db-service" },
+      { id: "@3", index: 1, session: "api2", path: "/w/api-service.tasks-2" },
+    ],
+  };
+  const actions = repairPlan(doctorReport(state, SCOPES), state, SCOPES);
+  const moves: { kind: "move-window"; windowId: string; session: string }[] = [];
+  for (const action of actions) {
+    if (action.kind === "move-window") {
+      moves.push(action);
+    }
+  }
+  const movedIds = moves.map((move) => move.windowId);
+  expect(new Set(movedIds).size).toBe(movedIds.length);
+  const destinationByWindow = new Map(moves.map((move) => [move.windowId, move.session]));
+  expect(destinationByWindow.get("@0")).toBe("api2");
+  expect(destinationByWindow.get("@1")).toBe("api2");
+  expect(destinationByWindow.get("@2")).toBe("db");
+  expect(actions).toEqual([
+    { kind: "new-session", name: "db", cwd: "/w/db-service" },
+    { kind: "move-window", windowId: "@2", session: "db" },
+    { kind: "move-window", windowId: "@0", session: "api2" },
+    { kind: "move-window", windowId: "@1", session: "api2" },
+  ]);
+});

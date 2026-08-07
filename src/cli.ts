@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
-import { writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { DEFAULT_CONFIG_PATH, loadConfig, ConfigError, MISC } from "./config.ts";
 import type { Scope } from "./config.ts";
 import { expandTilde, resolveScope, zshGlobs } from "./match.ts";
@@ -134,8 +135,18 @@ function cmdRepair(scopes: Scope[], dryRun: boolean) {
   }
 }
 
-function cmdGo(nameOrPath: string, scopes: Scope[]) {
-  const state = tmux.state();
+export function scopeDirectory(pattern: string): string {
+  const stripped = expandTilde(pattern).replace("*", "");
+  let directory = stripped;
+  if (!existsSync(stripped)) {
+    directory = dirname(stripped);
+  }
+  return directory;
+}
+
+export type GoTarget = { scope: string; cwd: string };
+
+export function goTarget(nameOrPath: string, scopes: Scope[]): GoTarget {
   let scope = nameOrPath;
   let cwd = expandTilde(nameOrPath);
   const known = scopes.find((entry) => entry.name === nameOrPath);
@@ -150,17 +161,26 @@ function cmdGo(nameOrPath: string, scopes: Scope[]) {
   if (known) {
     const first = known.patterns[0];
     if (first) {
-      cwd = expandTilde(first.replace("*", ""));
+      cwd = scopeDirectory(first);
     }
   }
-  const owner = sessionForScope(state, scopes, scope);
+  if (nameOrPath === MISC) {
+    cwd = process.cwd();
+  }
+  return { scope, cwd };
+}
+
+function cmdGo(nameOrPath: string, scopes: Scope[]) {
+  const state = tmux.state();
+  const target = goTarget(nameOrPath, scopes);
+  const owner = sessionForScope(state, scopes, target.scope);
   if (owner) {
     tmux.apply({ kind: "switch", target: owner });
     process.stdout.write(`switched to ${owner}\n`);
   } else {
-    tmux.apply({ kind: "new-session", name: scope, cwd });
-    tmux.apply({ kind: "switch", target: scope });
-    process.stdout.write(`created ${scope} at ${cwd}\n`);
+    tmux.apply({ kind: "new-session", name: target.scope, cwd: target.cwd });
+    tmux.apply({ kind: "switch", target: target.scope });
+    process.stdout.write(`created ${target.scope} at ${target.cwd}\n`);
   }
 }
 
@@ -212,4 +232,6 @@ function main() {
   }
 }
 
-main();
+if (import.meta.main) {
+  main();
+}

@@ -194,7 +194,7 @@ export function repairPlan(report: Report, state: TmuxState, scopes: Scope[]): A
       const primaryName = primary.name;
       for (const session of sessions) {
         if (session.name !== primaryName) {
-          const windows = state.windows.filter((entry) => entry.session === session.name);
+          const windows = state.windows.filter((entry) => entry.session === session.name && resolveScope(entry.path, scopes).scope === split.scope);
           for (const window of windows) {
             actions.push({ kind: "move-window", windowId: window.id, session: primaryName });
           }
