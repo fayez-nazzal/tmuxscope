@@ -9,6 +9,7 @@ import { adoptPlan, doctorReport, repairPlan, routePlan, sessionForScope } from 
 import type { RouteInput } from "./plan.ts";
 import { listRows, renderDoctor, renderList } from "./render.ts";
 import { tmux } from "./tmux.ts";
+import { TMUX_HOOK, ZSH_HOOK } from "./hooks.ts";
 
 export const VERSION = "0.1.0";
 
@@ -23,6 +24,7 @@ USAGE
   tmuxscope list                      every scope, its session and its patterns
   tmuxscope doctor                    report sessions that break the rules
   tmuxscope repair [--dry-run]        move stray windows and merge duplicates
+  tmuxscope hook zsh | tmux          print the glue to install
   tmuxscope -h | --help
   tmuxscope -v | --version
 
@@ -170,6 +172,16 @@ export function goTarget(nameOrPath: string, scopes: Scope[]): GoTarget {
   return { scope, cwd };
 }
 
+function cmdHook(kind: string) {
+  if (kind === "zsh") {
+    process.stdout.write(ZSH_HOOK);
+  } else if (kind === "tmux") {
+    process.stdout.write(TMUX_HOOK);
+  } else {
+    fail("hook takes zsh or tmux", 2);
+  }
+}
+
 function cmdGo(nameOrPath: string, scopes: Scope[]) {
   const state = tmux.state();
   const target = goTarget(nameOrPath, scopes);
@@ -198,6 +210,10 @@ function main() {
   }
   if (command === "" || wantsHelp) {
     process.stdout.write(HELP);
+    process.exit(0);
+  }
+  if (command === "hook") {
+    cmdHook(positionals[1] || "");
     process.exit(0);
   }
   const scopesPath = configPath();
