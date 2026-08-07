@@ -33,50 +33,86 @@ const NAME_COLLISION: TmuxState = {
   ],
 };
 
+const CONTESTED_LOSER: TmuxState = {
+  sessions: [
+    { id: "$0", name: "web", windows: 1, attached: false },
+    { id: "$1", name: "api", windows: 2, attached: true },
+  ],
+  windows: [
+    { id: "@0", index: 1, session: "web", path: "/w/api-service" },
+    { id: "@1", index: 1, session: "api", path: "/w/api-service/app" },
+    { id: "@2", index: 2, session: "api", path: "/w/webapp" },
+  ],
+};
+
 function applyActions(state: TmuxState, actions: Action[]): TmuxState {
   const sessions = state.sessions.map((session) => ({ ...session }));
   const windows = state.windows.map((window) => ({ ...window }));
   let created = 0;
   for (const action of actions) {
     if (action.kind === "new-session") {
-      const duplicate = sessions.some((session) => session.name === action.name);
-      expect(duplicate).toBe(false);
+      if (sessions.some((session) => session.name === action.name)) {
+        throw new Error(`duplicate session: ${action.name}`);
+      }
       created = created + 1;
       sessions.push({ id: `$n${created}`, name: action.name, windows: 1, attached: false });
       windows.push({ id: `@n${created}`, index: 1, session: action.name, path: action.cwd });
     }
     if (action.kind === "rename-session") {
       const session = sessions.find((entry) => entry.id === action.id);
-      if (session) {
-        for (const window of windows) {
-          if (window.session === session.name) {
-            window.session = action.name;
-          }
-        }
-        session.name = action.name;
+      if (!session) {
+        throw new Error(`can't find session: ${action.id}`);
       }
+      if (sessions.some((entry) => entry.name === action.name && entry.id !== action.id)) {
+        throw new Error(`duplicate session: ${action.name}`);
+      }
+      for (const window of windows) {
+        if (window.session === session.name) {
+          window.session = action.name;
+        }
+      }
+      session.name = action.name;
     }
     if (action.kind === "move-window") {
       const window = windows.find((entry) => entry.id === action.windowId);
-      const target = sessions.find((entry) => entry.name === action.session);
-      expect(window).toBeDefined();
-      expect(target).toBeDefined();
-      if (window) {
-        window.session = action.session;
+      if (!window) {
+        throw new Error(`can't find window: ${action.windowId}`);
+      }
+      if (!sessions.some((entry) => entry.name === action.session)) {
+        throw new Error(`can't find session: ${action.session}`);
+      }
+      const source = window.session;
+      window.session = action.session;
+      const emptied = !windows.some((entry) => entry.session === source);
+      if (emptied) {
+        const index = sessions.findIndex((entry) => entry.name === source);
+        sessions.splice(index, 1);
       }
     }
   }
-  const live = sessions.filter((session) => windows.some((window) => window.session === session.name));
-  for (const session of live) {
+  for (const session of sessions) {
     session.windows = windows.filter((window) => window.session === session.name).length;
   }
-  return { sessions: live, windows };
+  return { sessions, windows };
 }
 
 function repair(state: TmuxState): TmuxState {
   const actions = repairPlan(doctorReport(state, SCOPES), state, SCOPES);
   return applyActions(state, actions);
 }
+
+test("the simulator destroys a session the moment its last window leaves", () => {
+  const drained = applyActions(CONTESTED_LOSER, [{ kind: "move-window", windowId: "@0", session: "api" }]);
+  expect(drained.sessions.map((session) => session.name)).toEqual(["api"]);
+});
+
+test("the simulator refuses a move into a session an earlier move destroyed", () => {
+  const doomed: Action[] = [
+    { kind: "move-window", windowId: "@0", session: "api" },
+    { kind: "move-window", windowId: "@2", session: "web" },
+  ];
+  expect(() => applyActions(CONTESTED_LOSER, doomed)).toThrow("can't find session: web");
+});
 
 test("repair converges when two mixed sessions hold windows of the same third scope", () => {
   const before = doctorReport(TWO_MIXED, SCOPES);
