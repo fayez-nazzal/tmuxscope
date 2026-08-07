@@ -1,5 +1,7 @@
 import { spawnSync } from "node:child_process";
 
+export const FIELD = "\u001f";
+
 export type SessionInfo = { id: string; name: string; windows: number; attached: boolean };
 export type WindowInfo = { id: string; index: number; session: string; path: string };
 export type TmuxState = { sessions: SessionInfo[]; windows: WindowInfo[] };
@@ -22,7 +24,7 @@ export interface Tmux {
 }
 
 export function parsePaneContext(text: string): PaneContext {
-  const parts = text.trim().split("\t");
+  const parts = text.trim().split(FIELD);
   const session = parts[0] || "";
   const windowId = parts[1] || "";
   return { session, windowId };
@@ -32,7 +34,7 @@ export function parseSessions(text: string): SessionInfo[] {
   const sessions: SessionInfo[] = [];
   for (const line of text.split("\n")) {
     if (line.length > 0) {
-      const parts = line.split("\t");
+      const parts = line.split(FIELD);
       if (parts.length >= 4) {
         const id = parts[0];
         const name = parts[1];
@@ -49,7 +51,7 @@ export function parseWindows(text: string): WindowInfo[] {
   const windows: WindowInfo[] = [];
   for (const line of text.split("\n")) {
     if (line.length > 0) {
-      const parts = line.split("\t");
+      const parts = line.split(FIELD);
       if (parts.length >= 4) {
         const id = parts[0];
         const index = Number(parts[1]);
@@ -107,8 +109,8 @@ export function run(args: string[]): string {
 
 export const tmux: Tmux = {
   state(): TmuxState {
-    const sessions = parseSessions(run(["list-sessions", "-F", "#{session_id}\t#{session_name}\t#{session_windows}\t#{session_attached}"]));
-    const windows = parseWindows(run(["list-windows", "-a", "-F", "#{window_id}\t#{window_index}\t#{session_name}\t#{pane_current_path}"]));
+    const sessions = parseSessions(run(["list-sessions", "-F", `#{session_id}${FIELD}#{session_name}${FIELD}#{session_windows}${FIELD}#{session_attached}`]));
+    const windows = parseWindows(run(["list-windows", "-a", "-F", `#{window_id}${FIELD}#{window_index}${FIELD}#{session_name}${FIELD}#{pane_current_path}`]));
     return { sessions, windows };
   },
   paneWork(paneId: string): number {
@@ -118,7 +120,7 @@ export const tmux: Tmux = {
     return run(["list-panes", "-s", "-t", session, "-F", "#{pane_id}"]).split("\n").filter((line) => line.length > 0).length;
   },
   paneContext(paneId: string): PaneContext {
-    return parsePaneContext(run(["display-message", "-p", "-t", paneId, "#{session_name}\t#{window_id}"]));
+    return parsePaneContext(run(["display-message", "-p", "-t", paneId, `#{session_name}${FIELD}#{window_id}`]));
   },
   apply(action: Action) {
     run(commandFor(action));
