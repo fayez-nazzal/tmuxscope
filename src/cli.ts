@@ -3,9 +3,10 @@
 import { writeFileSync } from "node:fs";
 import { DEFAULT_CONFIG_PATH, loadConfig, ConfigError, MISC } from "./config.ts";
 import type { Scope } from "./config.ts";
-import { resolveScope, zshGlobs } from "./match.ts";
-import { adoptPlan, routePlan, sessionForScope } from "./plan.ts";
+import { expandTilde, resolveScope, zshGlobs } from "./match.ts";
+import { adoptPlan, doctorReport, repairPlan, routePlan, sessionForScope } from "./plan.ts";
 import type { RouteInput } from "./plan.ts";
+import { listRows, renderDoctor, renderList } from "./render.ts";
 import { tmux } from "./tmux.ts";
 
 export const VERSION = "0.1.0";
@@ -17,6 +18,10 @@ USAGE
   tmuxscope globs <path>              print the zsh patterns of that scope
   tmuxscope route <path>              hook entry point for a cd that left the scope
   tmuxscope adopt <session-id>        hook entry point for a new session
+  tmuxscope go <scope or path>        attach the scope session, creating it if needed
+  tmuxscope list                      every scope, its session and its patterns
+  tmuxscope doctor                    report sessions that break the rules
+  tmuxscope repair [--dry-run]        move stray windows and merge duplicates
   tmuxscope -h | --help
   tmuxscope -v | --version
 
@@ -101,6 +106,64 @@ function cmdAdopt(sessionId: string, scopes: Scope[]) {
   }
 }
 
+function cmdList(scopes: Scope[]) {
+  process.stdout.write(renderList(listRows(tmux.state(), scopes)));
+}
+
+function cmdDoctor(scopes: Scope[]) {
+  const report = doctorReport(tmux.state(), scopes);
+  process.stdout.write(renderDoctor(report));
+  if (report.problems > 0) {
+    process.exit(1);
+  }
+}
+
+function cmdRepair(scopes: Scope[], dryRun: boolean) {
+  const state = tmux.state();
+  const actions = repairPlan(doctorReport(state, scopes), state, scopes);
+  if (actions.length === 0) {
+    process.stdout.write("all clean\n");
+  }
+  for (const action of actions) {
+    if (dryRun) {
+      process.stdout.write(`would ${action.kind} ${JSON.stringify(action)}\n`);
+    } else {
+      tmux.apply(action);
+      process.stdout.write(`${action.kind} done\n`);
+    }
+  }
+}
+
+function cmdGo(nameOrPath: string, scopes: Scope[]) {
+  const state = tmux.state();
+  let scope = nameOrPath;
+  let cwd = expandTilde(nameOrPath);
+  const known = scopes.find((entry) => entry.name === nameOrPath);
+  if (!known && nameOrPath !== MISC) {
+    const resolution = resolveScope(expandTilde(nameOrPath), scopes);
+    if (resolution.matched === null && !nameOrPath.includes("/")) {
+      const knownNames = [...scopes.map((entry) => entry.name), MISC];
+      fail(`no scope named ${nameOrPath}\nknown scopes: ${knownNames.join(" ")}`, 2);
+    }
+    scope = resolution.scope;
+  }
+  if (known) {
+    const first = known.patterns[0];
+    if (first) {
+      cwd = expandTilde(first.replace("*", ""));
+    }
+  }
+  const owner = sessionForScope(state, scopes, scope);
+  if (owner) {
+    tmux.apply({ kind: "switch", target: owner });
+    process.stdout.write(`switched to ${owner}\n`);
+  } else {
+    tmux.apply({ kind: "new-session", name: scope, cwd });
+    tmux.apply({ kind: "switch", target: scope });
+    process.stdout.write(`created ${scope} at ${cwd}\n`);
+  }
+}
+
 function main() {
   const rawArgs = process.argv.slice(2);
   const flags = rawArgs.filter((arg) => arg.startsWith("-"));
@@ -136,6 +199,14 @@ function main() {
     cmdRoute(path, scopes);
   } else if (command === "adopt") {
     cmdAdopt(positionals[1] || "", scopes);
+  } else if (command === "list") {
+    cmdList(scopes);
+  } else if (command === "doctor") {
+    cmdDoctor(scopes);
+  } else if (command === "repair") {
+    cmdRepair(scopes, flags.includes("--dry-run"));
+  } else if (command === "go") {
+    cmdGo(positionals[1] || "", scopes);
   } else {
     fail(`unknown command ${command}, try --help`, 2);
   }
