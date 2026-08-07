@@ -162,54 +162,88 @@ export function doctorReport(state: TmuxState, scopes: Scope[]): Report {
   return report;
 }
 
+function homeOwners(state: TmuxState, scopes: Scope[]): Map<string, string> {
+  const owners = new Map<string, string>();
+  for (const session of state.sessions) {
+    const home = scopeOfSession(state, scopes, session.name);
+    const current = owners.get(home);
+    let winner = session.name;
+    if (current) {
+      winner = current;
+      const holder = state.sessions.find((entry) => entry.name === current);
+      if (holder && !holder.attached && session.attached) {
+        winner = session.name;
+      }
+    }
+    owners.set(home, winner);
+  }
+  return owners;
+}
+
+function finalName(name: string, renames: Map<string, string>): string {
+  let result = name;
+  const renamed = renames.get(name);
+  if (renamed) {
+    result = renamed;
+  }
+  return result;
+}
+
+function freeName(scope: string, taken: Set<string>): string {
+  let name = scope;
+  let suffix = 2;
+  while (taken.has(name)) {
+    name = `${scope}-${suffix}`;
+    suffix = suffix + 1;
+  }
+  return name;
+}
+
 export function repairPlan(report: Report, state: TmuxState, scopes: Scope[]): Action[] {
   const actions: Action[] = [];
-  const created = new Set<string>();
-  for (const mixed of report.mixed) {
-    const home = scopeOfSession(state, scopes, mixed.session);
-    const otherSessions = state.sessions.filter((session) => session.name !== mixed.session);
-    const otherWindows = state.windows.filter((window) => window.session !== mixed.session);
-    const others: TmuxState = { sessions: otherSessions, windows: otherWindows };
-    for (const window of mixed.windows) {
-      if (window.scope !== home) {
-        const owner = sessionForScope(others, scopes, window.scope);
-        let target = window.scope;
-        if (owner) {
-          target = owner;
-        }
-        if (!owner && !created.has(target)) {
-          created.add(target);
-          actions.push({ kind: "new-session", name: target, cwd: window.path });
-        }
-        const found = state.windows.find((entry) => entry.session === mixed.session && entry.index === window.index);
-        if (found) {
-          actions.push({ kind: "move-window", windowId: found.id, session: target });
+  if (report.problems > 0) {
+    const owners = homeOwners(state, scopes);
+    const claimed = new Set<string>(owners.values());
+    const creations = new Map<string, string>();
+    for (const window of state.windows) {
+      const scope = resolveScope(window.path, scopes).scope;
+      const owned = owners.has(scope) || creations.has(scope);
+      if (!owned) {
+        const free = state.sessions.find((session) => session.name === scope && !claimed.has(session.name));
+        if (free) {
+          owners.set(scope, free.name);
+          claimed.add(free.name);
+        } else {
+          creations.set(scope, window.path);
         }
       }
     }
-  }
-  for (const split of report.split) {
-    const sessions: TmuxState["sessions"] = [];
-    for (const name of split.sessions) {
-      const found = state.sessions.find((session) => session.name === name);
-      if (found) {
-        sessions.push(found);
+    const renames = new Map<string, string>();
+    for (const [scope, name] of owners) {
+      const holder = state.sessions.find((session) => session.name === name);
+      const twin = state.sessions.some((session) => session.name === scope);
+      if (holder && name !== scope && !twin) {
+        renames.set(name, scope);
+        actions.push({ kind: "rename-session", id: holder.id, name: scope });
       }
     }
-    const attached = sessions.find((session) => session.attached);
-    let primary = sessions[0];
-    if (attached) {
-      primary = attached;
+    const taken = new Set<string>(state.sessions.map((session) => finalName(session.name, renames)));
+    const destinations = new Map<string, string>();
+    for (const [scope, name] of owners) {
+      destinations.set(scope, finalName(name, renames));
     }
-    if (primary) {
-      const primaryName = primary.name;
-      for (const session of sessions) {
-        if (session.name !== primaryName) {
-          const windows = state.windows.filter((entry) => entry.session === session.name && resolveScope(entry.path, scopes).scope === split.scope);
-          for (const window of windows) {
-            actions.push({ kind: "move-window", windowId: window.id, session: primaryName });
-          }
-        }
+    for (const [scope, cwd] of creations) {
+      const name = freeName(scope, taken);
+      taken.add(name);
+      destinations.set(scope, name);
+      actions.push({ kind: "new-session", name, cwd });
+    }
+    for (const window of state.windows) {
+      const scope = resolveScope(window.path, scopes).scope;
+      const destination = destinations.get(scope);
+      const holder = finalName(window.session, renames);
+      if (destination && destination !== holder) {
+        actions.push({ kind: "move-window", windowId: window.id, session: destination });
       }
     }
   }
