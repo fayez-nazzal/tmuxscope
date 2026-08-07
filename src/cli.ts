@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { DEFAULT_CONFIG_PATH, loadConfig, ConfigError, MISC } from "./config.ts";
 import type { Scope } from "./config.ts";
 import { resolveScope, zshRules } from "./match.ts";
@@ -8,7 +9,7 @@ import { adoptPlan, doctorReport, repairPlan, routePlan, sessionForScope } from 
 import type { AdoptWindow, RouteInput } from "./plan.ts";
 import { listRows, renderAction, renderDoctor, renderList } from "./render.ts";
 import { goTarget } from "./target.ts";
-import type { PathProbe } from "./target.ts";
+import type { GoTarget, PathProbe } from "./target.ts";
 import { tmux } from "./tmux.ts";
 import type { TmuxState } from "./tmux.ts";
 import { TMUX_HOOK, ZSH_HOOK } from "./hooks.ts";
@@ -151,8 +152,25 @@ function cmdHook(kind: string) {
   }
 }
 
+function listDirectory(path: string): string[] {
+  let entries: string[] = [];
+  if (existsSync(path)) {
+    entries = readdirSync(path, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+  }
+  return entries;
+}
+
+function missingDirectory(target: GoTarget, scopes: Scope[], probe: PathProbe): string {
+  const scope = scopes.find((entry) => entry.name === target.scope);
+  let tried = `${probe.cwd} and ${probe.home}`;
+  if (scope) {
+    tried = scope.patterns.join(" ");
+  }
+  return `scope ${target.scope} has no directory to start in, tried ${tried}`;
+}
+
 function cmdGo(nameOrPath: string, scopes: Scope[]) {
-  const probe: PathProbe = { exists: existsSync, cwd: process.cwd() };
+  const probe: PathProbe = { exists: existsSync, list: listDirectory, cwd: process.cwd(), home: homedir() };
   const target = goTarget(nameOrPath, scopes, probe);
   if (target.unknown) {
     const knownNames = [...scopes.map((entry) => entry.name), MISC];
@@ -163,6 +181,8 @@ function cmdGo(nameOrPath: string, scopes: Scope[]) {
   if (owner) {
     tmux.apply({ kind: "switch", target: owner });
     process.stdout.write(`switched to ${owner}\n`);
+  } else if (target.missing) {
+    fail(missingDirectory(target, scopes, probe), 2);
   } else {
     tmux.apply({ kind: "new-session", name: target.scope, cwd: target.cwd });
     tmux.apply({ kind: "switch", target: target.scope });

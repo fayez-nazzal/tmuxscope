@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir, homedir } from "node:os";
 import { join } from "node:path";
 
@@ -73,4 +73,21 @@ test("route without a pane of its own exits 3 instead of guessing misc", () => {
   });
   expect(result.exitCode).toBe(3);
   expect(result.stderr.toString()).toContain("TMUX_PANE");
+});
+
+function stubbedTmux(): string {
+  const dir = mkdtempSync(join(tmpdir(), "tmuxscope-go-"));
+  const stub = join(dir, "tmux");
+  writeFileSync(stub, "#!/bin/sh\nexit 0\n");
+  chmodSync(stub, 0o755);
+  return dir;
+}
+
+test("go refuses a scope with no directory on disk instead of creating a session adopt will dismantle", () => {
+  const config = configFile("code = /nowhere/code\napi = /nowhere/code/api-service*\n");
+  const stub = stubbedTmux();
+  const env = { ...process.env, TMUXSCOPE_CONFIG: config, PATH: `${stub}:${process.env.PATH}` };
+  const result = Bun.spawnSync(["bun", CLI, "go", "api"], { env });
+  expect(result.exitCode).toBe(2);
+  expect(result.stderr.toString()).toContain("has no directory to start in");
 });
