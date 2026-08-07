@@ -65,4 +65,7 @@ test("preexec marks work by shell metacharacters, not by the leading word", () =
   expect(classifyPreexec("cd /tmp && rm -rf important")).toBe("work");
   expect(classifyPreexec("cd /tmp; npm test")).toBe("work");
   expect(classifyPreexec("npm test")).toBe("work");
+  expect(classifyPreexec("cd /tmp & rm -rf important")).toBe("work");
+  expect(classifyPreexec("cd /tmp && npm test")).toBe("work");
+  expect(classifyPreexec("cd /tmp")).toBe("free");
 });
