@@ -9,6 +9,7 @@ import { adoptPlan, doctorReport, repairPlan, routePlan, sessionForScope } from 
 import type { RouteInput } from "./plan.ts";
 import { listRows, renderDoctor, renderList } from "./render.ts";
 import { tmux } from "./tmux.ts";
+import type { TmuxState } from "./tmux.ts";
 import { TMUX_HOOK, ZSH_HOOK } from "./hooks.ts";
 
 export const VERSION = "0.1.0";
@@ -69,14 +70,18 @@ function cmdRoute(path: string, scopes: Scope[]) {
   const state = tmux.state();
   const paneId = process.env.TMUX_PANE || "";
   const originPath = process.env.TMUXSCOPE_ORIGIN || process.cwd();
-  const currentWindow = state.windows.find((window) => window.path === originPath);
   let currentSession = MISC;
-  if (currentWindow) {
-    currentSession = currentWindow.session;
+  let originWindowId = "";
+  if (paneId) {
+    const context = tmux.paneContext(paneId);
+    currentSession = context.session;
+    originWindowId = context.windowId;
   }
+  const routeWindows = state.windows.filter((window) => window.id !== originWindowId);
+  const routeState: TmuxState = { sessions: state.sessions, windows: routeWindows };
   const paneWork = tmux.paneWork(paneId);
   const panesInSession = tmux.panesInSession(currentSession);
-  const routeInput: RouteInput = { target: path, originPath, paneWork, panesInSession, scopes, state };
+  const routeInput: RouteInput = { target: path, originPath, paneWork, panesInSession, scopes, state: routeState };
   const plan = routePlan(routeInput);
   for (const action of plan.actions) {
     tmux.apply(action);

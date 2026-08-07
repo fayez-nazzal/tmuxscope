@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
+import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { ZSH_HOOK, TMUX_HOOK } from "../src/hooks.ts";
+import { tmpdir } from "node:os";
+import { ZSH_HOOK, TMUX_HOOK, TMUX_ADOPT_COMMAND } from "../src/hooks.ts";
 
 const CLI = join(import.meta.dir, "..", "src", "cli.ts");
 
@@ -22,7 +24,17 @@ test("the zsh hook is valid zsh", () => {
 });
 
 test("the tmux hook wires session-created to adopt", () => {
-  expect(TMUX_HOOK.trim()).toBe(`set-hook -g session-created 'run-shell "tmuxscope adopt #{session_id}"'`);
+  expect(TMUX_HOOK.trim()).toBe(`set-hook -g session-created "run-shell \\"tmuxscope adopt '#{session_id}'\\""`);
+});
+
+test("the tmux hook quotes the session id so a shell does not read it as a positional parameter", () => {
+  const dir = mkdtempSync(join(tmpdir(), "tmuxscope-hook-"));
+  const stub = join(dir, "tmuxscope");
+  writeFileSync(stub, "#!/bin/sh\necho \"ARGS:$@\"\n");
+  chmodSync(stub, 0o755);
+  const command = TMUX_ADOPT_COMMAND.replace("#{session_id}", "$5");
+  const result = Bun.spawnSync(["sh", "-c", command], { env: { ...process.env, PATH: `${dir}:${process.env.PATH}` } });
+  expect(result.stdout.toString().trim()).toBe("ARGS:adopt $5");
 });
 
 test("hook zsh prints the snippet", () => {

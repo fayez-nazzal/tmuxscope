@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 export type SessionInfo = { id: string; name: string; windows: number; attached: boolean };
 export type WindowInfo = { id: string; index: number; session: string; path: string };
 export type TmuxState = { sessions: SessionInfo[]; windows: WindowInfo[] };
+export type PaneContext = { session: string; windowId: string };
 
 export type Action =
   | { kind: "new-session"; name: string; cwd: string }
@@ -15,8 +16,16 @@ export interface Tmux {
   state(): TmuxState;
   paneWork(paneId: string): number;
   panesInSession(session: string): number;
+  paneContext(paneId: string): PaneContext;
   apply(action: Action): void;
   message(text: string): void;
+}
+
+export function parsePaneContext(text: string): PaneContext {
+  const parts = text.trim().split("\t");
+  const session = parts[0] || "";
+  const windowId = parts[1] || "";
+  return { session, windowId };
 }
 
 export function parseSessions(text: string): SessionInfo[] {
@@ -107,6 +116,9 @@ export const tmux: Tmux = {
   },
   panesInSession(session: string): number {
     return run(["list-panes", "-s", "-t", session, "-F", "#{pane_id}"]).split("\n").filter((line) => line.length > 0).length;
+  },
+  paneContext(paneId: string): PaneContext {
+    return parsePaneContext(run(["display-message", "-p", "-t", paneId, "#{session_name}\t#{window_id}"]));
   },
   apply(action: Action) {
     run(commandFor(action));

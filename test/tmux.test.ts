@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { commandFor, parseSessions, parseWindows } from "../src/tmux.ts";
+import { commandFor, parsePaneContext, parseSessions, parseWindows } from "../src/tmux.ts";
 
 test("parseSessions reads id, name, window count and attached flag", () => {
   const text = "$0\tapi\t3\t1\n$1\tmain\t1\t0\n";
@@ -51,4 +51,12 @@ test("parseWindows skips incomplete lines", () => {
 test("commandFor throws on unknown action kind", () => {
   const action: any = { kind: "unknown" };
   expect(() => commandFor(action)).toThrow();
+});
+
+test("parsePaneContext reads the session and window of a pane", () => {
+  expect(parsePaneContext("api\t@4\n")).toEqual({ session: "api", windowId: "@4" });
+});
+
+test("parsePaneContext defaults to empty strings on a blank result", () => {
+  expect(parsePaneContext("")).toEqual({ session: "", windowId: "" });
 });

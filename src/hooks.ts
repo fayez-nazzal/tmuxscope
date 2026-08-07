@@ -39,5 +39,7 @@ add-zsh-hook preexec _tmuxscope_preexec
 _tmuxscope_init
 `;
 
-export const TMUX_HOOK = `set-hook -g session-created 'run-shell "tmuxscope adopt #{session_id}"'
+export const TMUX_ADOPT_COMMAND = "tmuxscope adopt '#{session_id}'";
+
+export const TMUX_HOOK = `set-hook -g session-created "run-shell \\"${TMUX_ADOPT_COMMAND}\\""
 `;

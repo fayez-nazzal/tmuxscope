@@ -72,3 +72,26 @@ test("the last pane of a session is always restored, never closed", () => {
   expect(plan.origin).toBe("restore");
   expect(plan.cdPath).toBe("/w/api-service");
 });
+
+test("sessionForScope misattributes a target session when the origin window already shows the new path", () => {
+  const staleState: TmuxState = {
+    sessions: [{ id: "$0", name: "api", windows: 1, attached: true }],
+    windows: [{ id: "@0", index: 1, session: "api", path: "/w/webapp" }],
+  };
+  expect(sessionForScope(staleState, SCOPES, "web")).toBe("api");
+});
+
+test("excluding the origin window before planning avoids that misattribution", () => {
+  const staleState: TmuxState = {
+    sessions: [{ id: "$0", name: "api", windows: 1, attached: true }],
+    windows: [{ id: "@0", index: 1, session: "api", path: "/w/webapp" }],
+  };
+  const routeWindows = staleState.windows.filter((window) => window.id !== "@0");
+  const routeState: TmuxState = { sessions: staleState.sessions, windows: routeWindows };
+  expect(sessionForScope(routeState, SCOPES, "web")).toBe(null);
+  const plan = routePlan(input({ state: routeState, panesInSession: 1 }));
+  expect(plan.actions).toEqual([
+    { kind: "new-session", name: "web", cwd: "/w/webapp" },
+    { kind: "switch", target: "web" },
+  ]);
+});
