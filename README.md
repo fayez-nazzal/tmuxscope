@@ -25,9 +25,17 @@ On overlap the longest pattern wins. Anything unmatched belongs to `misc`.
     tmuxscope doctor                report sessions that break the rules
     tmuxscope repair [--dry-run]    move stray windows and merge duplicates
     tmuxscope resolve <path>        print the scope owning a path
+    tmuxscope rules <path>          print the zsh fast path rules of that scope
     tmuxscope hook zsh | tmux       print the glue to install
 
 Set `TMUXSCOPE_OFF=1` to disable routing in one shell.
+
+## Limits
+
+Paths are compared as written, with no symlink resolution. zsh reports the logical
+`$PWD` while tmux reports the physical `pane_current_path`, so a scope reached
+through a symlink can resolve one way in the shell and another way in tmux, for
+example `/tmp/work` against `/private/tmp/work`. Point scope patterns at real paths.
 
 ## Tests
 

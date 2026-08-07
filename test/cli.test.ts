@@ -40,9 +40,15 @@ test("resolve --json with no path argument defaults to the current working direc
   expect(JSON.parse(result.out)).toMatchObject({ path: process.cwd() });
 });
 
-test("globs prints the zsh patterns of the scope owning a path", () => {
+test("rules prints one zsh fast path rule per line for the scope owning a path", () => {
   const config = configFile("web = ~/webapp\n");
-  expect(run(["globs", `${HOME}/webapp`], config).out).toBe(`${HOME}/webapp ${HOME}/webapp/*`);
+  expect(run(["rules", `${HOME}/webapp`], config).out).toBe(`+${HOME}/webapp(|/*)`);
+});
+
+test("rules for an unscoped path ends with a catch all so misc stays cheap", () => {
+  const config = configFile("web = ~/webapp\n");
+  const lines = run(["rules", `${HOME}/Downloads`], config).out.split("\n");
+  expect(lines).toEqual([`-${HOME}/webapp(|/*)`, "+*"]);
 });
 
 test("a broken config exits 2 and names the line", () => {
@@ -58,4 +64,13 @@ test("route outside tmux exits 3", () => {
     env: { ...process.env, TMUXSCOPE_CONFIG: config, TMUX: "" },
   });
   expect(result.exitCode).toBe(3);
+});
+
+test("route without a pane of its own exits 3 instead of guessing misc", () => {
+  const config = configFile("web = ~/webapp\n");
+  const result = Bun.spawnSync(["bun", CLI, "route", `${HOME}/webapp`], {
+    env: { ...process.env, TMUXSCOPE_CONFIG: config, TMUX: "/tmp/fake,1,0", TMUX_PANE: "" },
+  });
+  expect(result.exitCode).toBe(3);
+  expect(result.stderr.toString()).toContain("TMUX_PANE");
 });

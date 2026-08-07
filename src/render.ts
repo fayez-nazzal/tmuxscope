@@ -2,7 +2,7 @@ import { MISC } from "./config.ts";
 import type { Scope } from "./config.ts";
 import { sessionForScope } from "./plan.ts";
 import type { Report } from "./plan.ts";
-import type { TmuxState } from "./tmux.ts";
+import type { Action, TmuxState } from "./tmux.ts";
 
 export type Row = { scope: string; session: string; windows: number; attached: boolean; patterns: string[] };
 
@@ -92,4 +92,24 @@ export function renderDoctor(report: Report): string {
     lines.push("run tmuxscope repair to fix");
   }
   return `${lines.join("\n")}\n`;
+}
+
+export function renderAction(action: Action): string {
+  let text = "";
+  if (action.kind === "new-session") {
+    text = `new-session ${action.name} at ${action.cwd}`;
+  }
+  if (action.kind === "new-window") {
+    text = `new-window in ${action.session} at ${action.cwd}`;
+  }
+  if (action.kind === "switch") {
+    text = `switch to ${action.target}`;
+  }
+  if (action.kind === "move-window") {
+    text = `move-window ${action.windowId} to ${action.session}`;
+  }
+  if (action.kind === "rename-session") {
+    text = `rename-session ${action.id} to ${action.name}`;
+  }
+  return text;
 }

@@ -1,13 +1,14 @@
 #!/usr/bin/env bun
 
 import { existsSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
 import { DEFAULT_CONFIG_PATH, loadConfig, ConfigError, MISC } from "./config.ts";
 import type { Scope } from "./config.ts";
-import { expandTilde, resolveScope, zshGlobs } from "./match.ts";
+import { resolveScope, zshRules } from "./match.ts";
 import { adoptPlan, doctorReport, repairPlan, routePlan, sessionForScope } from "./plan.ts";
-import type { RouteInput } from "./plan.ts";
-import { listRows, renderDoctor, renderList } from "./render.ts";
+import type { AdoptWindow, RouteInput } from "./plan.ts";
+import { listRows, renderAction, renderDoctor, renderList } from "./render.ts";
+import { goTarget } from "./target.ts";
+import type { PathProbe } from "./target.ts";
 import { tmux } from "./tmux.ts";
 import type { TmuxState } from "./tmux.ts";
 import { TMUX_HOOK, ZSH_HOOK } from "./hooks.ts";
@@ -18,7 +19,7 @@ const HELP = `tmuxscope ${VERSION} — one tmux session per project scope
 
 USAGE
   tmuxscope resolve <path> [--json]   print the scope owning a path
-  tmuxscope globs <path>              print the zsh patterns of that scope
+  tmuxscope rules <path>              print the zsh fast path rules of that scope
   tmuxscope route <path>              hook entry point for a cd that left the scope
   tmuxscope adopt <session-id>        hook entry point for a new session
   tmuxscope go <scope or path>        attach the scope session, creating it if needed
@@ -58,29 +59,26 @@ function cmdResolve(path: string, scopes: Scope[], json: boolean) {
   }
 }
 
-function cmdGlobs(path: string, scopes: Scope[]) {
+function cmdRules(path: string, scopes: Scope[]) {
   const resolution = resolveScope(path, scopes);
-  process.stdout.write(`${zshGlobs(resolution.scope, scopes).join(" ")}\n`);
+  process.stdout.write(`${zshRules(resolution.scope, scopes).join("\n")}\n`);
 }
 
 function cmdRoute(path: string, scopes: Scope[]) {
   if (!process.env.TMUX) {
     fail("route only runs inside tmux", 3);
   }
-  const state = tmux.state();
-  const paneId = process.env.TMUX_PANE || "";
-  const originPath = process.env.TMUXSCOPE_ORIGIN || process.cwd();
-  let currentSession = MISC;
-  let originWindowId = "";
-  if (paneId) {
-    const context = tmux.paneContext(paneId);
-    currentSession = context.session;
-    originWindowId = context.windowId;
+  const paneId = process.env.TMUX_PANE;
+  if (!paneId) {
+    fail("route needs TMUX_PANE, run it from a tmux pane", 3);
   }
-  const routeWindows = state.windows.filter((window) => window.id !== originWindowId);
+  const state = tmux.state();
+  const originPath = process.env.TMUXSCOPE_ORIGIN || process.cwd();
+  const context = tmux.paneContext(paneId);
+  const routeWindows = state.windows.filter((window) => window.id !== context.windowId);
   const routeState: TmuxState = { sessions: state.sessions, windows: routeWindows };
   const paneWork = tmux.paneWork(paneId);
-  const panesInSession = tmux.panesInSession(currentSession);
+  const panesInSession = tmux.panesInSession(context.session);
   const routeInput: RouteInput = { target: path, originPath, paneWork, panesInSession, scopes, state: routeState };
   const plan = routePlan(routeInput);
   for (const action of plan.actions) {
@@ -90,7 +88,7 @@ function cmdRoute(path: string, scopes: Scope[]) {
     writeFileSync(process.env.TMUXSCOPE_CD_FILE, plan.cdPath);
   }
   if (plan.origin === "close" && process.env.TMUXSCOPE_EXEC_FILE) {
-    writeFileSync(process.env.TMUXSCOPE_EXEC_FILE, `tmux kill-pane -t ${paneId}\n`);
+    writeFileSync(process.env.TMUXSCOPE_EXEC_FILE, `tmux kill-pane -t '${paneId}'\n`);
   }
   if (plan.message) {
     process.stdout.write(`${plan.message}\n`);
@@ -101,9 +99,10 @@ function cmdAdopt(sessionId: string, scopes: Scope[]) {
   const state = tmux.state();
   const session = state.sessions.find((entry) => entry.id === sessionId);
   if (session) {
-    const window = state.windows.find((entry) => entry.session === session.name);
-    if (window) {
-      const plan = adoptPlan({ sessionId, sessionName: session.name, windowId: window.id, windowPath: window.path, scopes, state, attached: session.attached });
+    const owned = state.windows.filter((entry) => entry.session === session.name);
+    const windows: AdoptWindow[] = owned.map((entry) => ({ id: entry.id, path: entry.path }));
+    if (windows.length > 0) {
+      const plan = adoptPlan({ sessionId, sessionName: session.name, windows, scopes, state, attached: session.attached });
       for (const action of plan.actions) {
         tmux.apply(action);
       }
@@ -134,47 +133,12 @@ function cmdRepair(scopes: Scope[], dryRun: boolean) {
   }
   for (const action of actions) {
     if (dryRun) {
-      process.stdout.write(`would ${action.kind} ${JSON.stringify(action)}\n`);
+      process.stdout.write(`would ${renderAction(action)}\n`);
     } else {
       tmux.apply(action);
-      process.stdout.write(`${action.kind} done\n`);
+      process.stdout.write(`${renderAction(action)}\n`);
     }
   }
-}
-
-export function scopeDirectory(pattern: string): string {
-  const stripped = expandTilde(pattern).replace("*", "");
-  let directory = stripped;
-  if (!existsSync(stripped)) {
-    directory = dirname(stripped);
-  }
-  return directory;
-}
-
-export type GoTarget = { scope: string; cwd: string };
-
-export function goTarget(nameOrPath: string, scopes: Scope[]): GoTarget {
-  let scope = nameOrPath;
-  let cwd = expandTilde(nameOrPath);
-  const known = scopes.find((entry) => entry.name === nameOrPath);
-  if (!known && nameOrPath !== MISC) {
-    const resolution = resolveScope(expandTilde(nameOrPath), scopes);
-    if (resolution.matched === null && !nameOrPath.includes("/")) {
-      const knownNames = [...scopes.map((entry) => entry.name), MISC];
-      fail(`no scope named ${nameOrPath}\nknown scopes: ${knownNames.join(" ")}`, 2);
-    }
-    scope = resolution.scope;
-  }
-  if (known) {
-    const first = known.patterns[0];
-    if (first) {
-      cwd = scopeDirectory(first);
-    }
-  }
-  if (nameOrPath === MISC) {
-    cwd = process.cwd();
-  }
-  return { scope, cwd };
 }
 
 function cmdHook(kind: string) {
@@ -188,8 +152,13 @@ function cmdHook(kind: string) {
 }
 
 function cmdGo(nameOrPath: string, scopes: Scope[]) {
+  const probe: PathProbe = { exists: existsSync, cwd: process.cwd() };
+  const target = goTarget(nameOrPath, scopes, probe);
+  if (target.unknown) {
+    const knownNames = [...scopes.map((entry) => entry.name), MISC];
+    fail(`no scope named ${nameOrPath}\nknown scopes: ${knownNames.join(" ")}`, 2);
+  }
   const state = tmux.state();
-  const target = goTarget(nameOrPath, scopes);
   const owner = sessionForScope(state, scopes, target.scope);
   if (owner) {
     tmux.apply({ kind: "switch", target: owner });
@@ -201,12 +170,34 @@ function cmdGo(nameOrPath: string, scopes: Scope[]) {
   }
 }
 
+function dispatch(command: string, positionals: string[], flags: string[], scopes: Scope[]) {
+  const path = positionals[1] || process.cwd();
+  if (command === "resolve") {
+    cmdResolve(path, scopes, flags.includes("--json"));
+  } else if (command === "rules") {
+    cmdRules(path, scopes);
+  } else if (command === "route") {
+    cmdRoute(path, scopes);
+  } else if (command === "adopt") {
+    cmdAdopt(positionals[1] || "", scopes);
+  } else if (command === "list") {
+    cmdList(scopes);
+  } else if (command === "doctor") {
+    cmdDoctor(scopes);
+  } else if (command === "repair") {
+    cmdRepair(scopes, flags.includes("--dry-run"));
+  } else if (command === "go") {
+    cmdGo(positionals[1] || "", scopes);
+  } else {
+    fail(`unknown command ${command}, try --help`, 2);
+  }
+}
+
 function main() {
   const rawArgs = process.argv.slice(2);
   const flags = rawArgs.filter((arg) => arg.startsWith("-"));
   const positionals = rawArgs.filter((arg) => !arg.startsWith("-"));
   const command = positionals[0] || "";
-  const json = flags.includes("--json");
   const wantsVersion = flags.includes("-v") || flags.includes("--version");
   const wantsHelp = flags.includes("-h") || flags.includes("--help");
   if (wantsVersion) {
@@ -231,25 +222,14 @@ function main() {
     }
     throw error;
   }
-  const path = positionals[1] || process.cwd();
-  if (command === "resolve") {
-    cmdResolve(path, scopes, json);
-  } else if (command === "globs") {
-    cmdGlobs(path, scopes);
-  } else if (command === "route") {
-    cmdRoute(path, scopes);
-  } else if (command === "adopt") {
-    cmdAdopt(positionals[1] || "", scopes);
-  } else if (command === "list") {
-    cmdList(scopes);
-  } else if (command === "doctor") {
-    cmdDoctor(scopes);
-  } else if (command === "repair") {
-    cmdRepair(scopes, flags.includes("--dry-run"));
-  } else if (command === "go") {
-    cmdGo(positionals[1] || "", scopes);
-  } else {
-    fail(`unknown command ${command}, try --help`, 2);
+  try {
+    dispatch(command, positionals, flags, scopes);
+  } catch (error) {
+    let detail = String(error);
+    if (error instanceof Error) {
+      detail = error.message;
+    }
+    fail(`tmuxscope ${command}: ${detail}`, 4);
   }
 }
 
