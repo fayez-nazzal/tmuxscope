@@ -8,21 +8,30 @@ _tmuxscope_preexec() {
   tmux set-option -p @tmuxscope_work 1 2>/dev/null
 }
 
+_tmuxscope_rules() {
+  export TMUXSCOPE_RULES="$(command tmuxscope rules "$PWD")"
+}
+
 _tmuxscope_chpwd() {
   [[ -n "$TMUX" && -z "$TMUXSCOPE_OFF" ]] || return
-  local pattern
-  for pattern in \${=TMUXSCOPE_GLOBS}; do
-    [[ "$PWD" == \${~pattern} ]] && return
+  local TMUXSCOPE_OFF=1
+  setopt localoptions extended_glob
+  local rule
+  for rule in \${(f)TMUXSCOPE_RULES}; do
+    if [[ "$PWD" == \${~rule[2,-1]} ]]; then
+      [[ "\${rule[1]}" == "+" ]] && return
+      break
+    fi
   done
   local cd_file exec_file previous
   previous="$OLDPWD"
   cd_file="$(mktemp)"
   exec_file="$(mktemp)"
-  TMUXSCOPE_ORIGIN="$previous" TMUXSCOPE_CD_FILE="$cd_file" TMUXSCOPE_EXEC_FILE="$exec_file" command tmuxscope route "$PWD"
+  TMUXSCOPE_ORIGIN="$previous" TMUXSCOPE_CD_FILE="$cd_file" TMUXSCOPE_EXEC_FILE="$exec_file" command tmuxscope route "$PWD" || print -u2 "tmuxscope: route failed, this pane stayed put"
   if [[ -s "$cd_file" ]]; then
     builtin cd -- "$(<"$cd_file")"
-    export TMUXSCOPE_GLOBS="$(command tmuxscope globs "$PWD")"
   fi
+  _tmuxscope_rules
   if [[ -s "$exec_file" ]]; then
     source "$exec_file"
   fi
@@ -31,7 +40,7 @@ _tmuxscope_chpwd() {
 
 _tmuxscope_init() {
   [[ -n "$TMUX" ]] || return
-  export TMUXSCOPE_GLOBS="$(command tmuxscope globs "$PWD")"
+  _tmuxscope_rules
 }
 
 add-zsh-hook chpwd _tmuxscope_chpwd

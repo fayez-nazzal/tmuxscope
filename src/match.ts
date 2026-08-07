@@ -4,6 +4,8 @@ import type { Scope } from "./config.ts";
 
 export type Resolution = { scope: string; matched: string | null };
 
+const ZSH_LITERAL = /[^A-Za-z0-9_./-]/g;
+
 export function expandTilde(path: string): string {
   let expanded = path;
   if (path === "~") {
@@ -15,9 +17,12 @@ export function expandTilde(path: string): string {
   return expanded;
 }
 
+export function normalizePattern(pattern: string): string {
+  return expandTilde(pattern).replace(/\/+$/, "");
+}
+
 function patternRegExp(pattern: string): RegExp {
-  const expanded = expandTilde(pattern).replace(/\/+$/, "");
-  const escaped = expanded.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+  const escaped = normalizePattern(pattern).replace(/[.+^${}()|[\]\\]/g, "\\$&");
   const globbed = escaped.replace(/\*/g, "[^/]*");
   return new RegExp(`^${globbed}(/.*)?$`);
 }
@@ -25,7 +30,7 @@ function patternRegExp(pattern: string): RegExp {
 export function matchScore(pattern: string, path: string): number {
   let score = -1;
   if (patternRegExp(pattern).test(path)) {
-    score = expandTilde(pattern).length;
+    score = normalizePattern(pattern).length;
   }
   return score;
 }
@@ -46,16 +51,27 @@ export function resolveScope(path: string, scopes: Scope[]): Resolution {
   return resolution;
 }
 
-export function zshGlobs(scopeName: string, scopes: Scope[]): string[] {
-  const globs: string[] = [];
+function zshGlob(pattern: string): string {
+  const segments = normalizePattern(pattern).split("*");
+  const escaped = segments.map((segment) => segment.replace(ZSH_LITERAL, "\\$&"));
+  return `${escaped.join("[^/]#")}(|/*)`;
+}
+
+export function zshRules(scopeName: string, scopes: Scope[]): string[] {
+  const ranked: { length: number; rule: string }[] = [];
   for (const scope of scopes) {
-    if (scope.name === scopeName) {
-      for (const pattern of scope.patterns) {
-        const expanded = expandTilde(pattern).replace(/\/+$/, "");
-        globs.push(expanded);
-        globs.push(`${expanded}/*`);
+    for (const pattern of scope.patterns) {
+      let sign = "-";
+      if (scope.name === scopeName) {
+        sign = "+";
       }
+      ranked.push({ length: normalizePattern(pattern).length, rule: `${sign}${zshGlob(pattern)}` });
     }
   }
-  return globs;
+  ranked.sort((left, right) => right.length - left.length);
+  const rules = ranked.map((entry) => entry.rule);
+  if (scopeName === MISC) {
+    rules.push("+*");
+  }
+  return rules;
 }
