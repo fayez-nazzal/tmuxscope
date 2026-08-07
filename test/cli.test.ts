@@ -75,6 +75,17 @@ test("route without a pane of its own exits 3 instead of guessing misc", () => {
   expect(result.stderr.toString()).toContain("TMUX_PANE");
 });
 
+test("globs still answers as the older name of rules, in the space separated form", () => {
+  const config = configFile("web = ~/webapp\n");
+  const result = run(["globs", `${HOME}/webapp/src`], config);
+  expect(result).toMatchObject({ out: `${HOME}/webapp ${HOME}/webapp/*`, code: 0 });
+});
+
+test("globs for an unscoped path prints nothing, the way it always did", () => {
+  const config = configFile("web = ~/webapp\n");
+  expect(run(["globs", `${HOME}/Downloads`], config)).toMatchObject({ out: "", code: 0 });
+});
+
 function stubbedTmux(): string {
   const dir = mkdtempSync(join(tmpdir(), "tmuxscope-go-"));
   const stub = join(dir, "tmux");

@@ -4,7 +4,7 @@ import { existsSync, readdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { DEFAULT_CONFIG_PATH, loadConfig, ConfigError, MISC } from "./config.ts";
 import type { Scope } from "./config.ts";
-import { resolveScope, zshRules } from "./match.ts";
+import { resolveScope, zshGlobs, zshRules } from "./match.ts";
 import { adoptPlan, doctorReport, repairPlan, routePlan, sessionForScope } from "./plan.ts";
 import type { AdoptWindow, RouteInput } from "./plan.ts";
 import { listRows, renderAction, renderDoctor, renderList } from "./render.ts";
@@ -21,6 +21,7 @@ const HELP = `tmuxscope ${VERSION} — one tmux session per project scope
 USAGE
   tmuxscope resolve <path> [--json]   print the scope owning a path
   tmuxscope rules <path>              print the zsh fast path rules of that scope
+  tmuxscope globs <path>              the rules in the older format, for shells opened before the rename
   tmuxscope route <path>              hook entry point for a cd that left the scope
   tmuxscope adopt <session-id>        hook entry point for a new session
   tmuxscope go <scope or path>        attach the scope session, creating it if needed
@@ -63,6 +64,11 @@ function cmdResolve(path: string, scopes: Scope[], json: boolean) {
 function cmdRules(path: string, scopes: Scope[]) {
   const resolution = resolveScope(path, scopes);
   process.stdout.write(`${zshRules(resolution.scope, scopes).join("\n")}\n`);
+}
+
+function cmdGlobs(path: string, scopes: Scope[]) {
+  const resolution = resolveScope(path, scopes);
+  process.stdout.write(`${zshGlobs(resolution.scope, scopes).join(" ")}\n`);
 }
 
 function cmdRoute(path: string, scopes: Scope[]) {
@@ -196,6 +202,8 @@ function dispatch(command: string, positionals: string[], flags: string[], scope
     cmdResolve(path, scopes, flags.includes("--json"));
   } else if (command === "rules") {
     cmdRules(path, scopes);
+  } else if (command === "globs") {
+    cmdGlobs(path, scopes);
   } else if (command === "route") {
     cmdRoute(path, scopes);
   } else if (command === "adopt") {

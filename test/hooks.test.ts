@@ -126,3 +126,84 @@ cd ${second}
 test("chpwd routes once for one cd, the restore does not re enter the hook", () => {
   expect(chpwdRouteCount(ZSH_HOOK)).toBe(1);
 });
+
+const OLD_ZSH_HOOK = `autoload -Uz add-zsh-hook
+
+_tmuxscope_chpwd() {
+  [[ -n "$TMUX" && -z "$TMUXSCOPE_OFF" ]] || return
+  local pattern
+  for pattern in \${=TMUXSCOPE_GLOBS}; do
+    [[ "$PWD" == \${~pattern} ]] && return
+  done
+  local cd_file exec_file previous
+  previous="$OLDPWD"
+  cd_file="$(mktemp)"
+  exec_file="$(mktemp)"
+  TMUXSCOPE_ORIGIN="$previous" TMUXSCOPE_CD_FILE="$cd_file" TMUXSCOPE_EXEC_FILE="$exec_file" command tmuxscope route "$PWD"
+  if [[ -s "$cd_file" ]]; then
+    builtin cd -- "$(<"$cd_file")"
+    export TMUXSCOPE_GLOBS="$(command tmuxscope globs "$PWD")"
+  fi
+  if [[ -s "$exec_file" ]]; then
+    source "$exec_file"
+  fi
+  rm -f "$cd_file" "$exec_file"
+}
+
+_tmuxscope_init() {
+  [[ -n "$TMUX" ]] || return
+  export TMUXSCOPE_GLOBS="$(command tmuxscope globs "$PWD")"
+}
+
+add-zsh-hook chpwd _tmuxscope_chpwd
+_tmuxscope_init
+`;
+
+function oldHookRouteCount(answersGlobs: boolean): number {
+  const dir = mkdtempSync(join(tmpdir(), "tmuxscope-old-hook-"));
+  const bin = join(dir, "bin");
+  const scoped = join(dir, "webapp");
+  const elsewhere = join(dir, "elsewhere");
+  const log = join(dir, "log");
+  const config = join(dir, "scopes.conf");
+  mkdirSync(bin);
+  mkdirSync(scoped);
+  mkdirSync(elsewhere);
+  writeFileSync(log, "");
+  writeFileSync(config, `web = ${scoped}\n`);
+  let globs = `printf 'unknown command globs, try --help\\n' >&2; exit 2`;
+  if (answersGlobs) {
+    globs = `exec bun ${CLI} "$@"`;
+  }
+  const stub = join(bin, "tmuxscope");
+  writeFileSync(stub, `#!/bin/sh
+case "$1" in
+  route)
+    echo route >> ${log}
+    printf '%s' "${scoped}" > "$TMUXSCOPE_CD_FILE"
+    ;;
+  globs)
+    ${globs}
+    ;;
+esac
+`);
+  chmodSync(stub, 0o755);
+  const hookFile = join(dir, "hook.zsh");
+  writeFileSync(hookFile, OLD_ZSH_HOOK);
+  const script = `
+export PATH=${bin}:$PATH
+export TMUXSCOPE_CONFIG=${config}
+export TMUX=fake
+FUNCNEST=25
+builtin cd ${scoped}
+source ${hookFile}
+cd ${elsewhere}
+`;
+  Bun.spawnSync(["zsh", "-c", script]);
+  return readFileSync(log, "utf8").trim().split("\n").filter((line) => line.length > 0).length;
+}
+
+test("a shell opened before the rename keeps routing once per cd, because globs still answers", () => {
+  expect(oldHookRouteCount(false)).toBeGreaterThan(1);
+  expect(oldHookRouteCount(true)).toBe(1);
+});
