@@ -40,6 +40,7 @@ export type AdoptInput = {
   windowPath: string;
   scopes: Scope[];
   state: TmuxState;
+  attached: boolean;
 };
 
 export type AdoptPlan = { actions: Action[]; message: string };
@@ -51,7 +52,9 @@ export function adoptPlan(input: AdoptInput): AdoptPlan {
   const owner = sessionForScope(others, input.scopes, scope);
   if (owner) {
     plan.actions.push({ kind: "move-window", windowId: input.windowId, session: owner });
-    plan.actions.push({ kind: "switch", target: owner });
+    if (input.attached) {
+      plan.actions.push({ kind: "switch", target: owner });
+    }
     plan.message = `merged into ${owner}`;
   } else if (input.sessionName !== scope) {
     plan.actions.push({ kind: "rename-session", id: input.sessionId, name: scope });

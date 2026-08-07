@@ -20,13 +20,13 @@ const STATE: TmuxState = {
 };
 
 test("a new session in a free scope is renamed to the scope", () => {
-  const plan = adoptPlan({ sessionId: "$9", sessionName: "scratch", windowId: "@9", windowPath: "/w/toolkit", scopes: SCOPES, state: STATE });
+  const plan = adoptPlan({ sessionId: "$9", sessionName: "scratch", windowId: "@9", windowPath: "/w/toolkit", scopes: SCOPES, state: STATE, attached: true });
   expect(plan.actions).toEqual([{ kind: "rename-session", id: "$9", name: "tools" }]);
   expect(plan.message).toBe("renamed scratch to tools");
 });
 
-test("a new session in a taken scope is merged into the owner", () => {
-  const plan = adoptPlan({ sessionId: "$9", sessionName: "web2", windowId: "@9", windowPath: "/w/webapp/app", scopes: SCOPES, state: STATE });
+test("an attached session in a taken scope is merged into the owner and switches focus", () => {
+  const plan = adoptPlan({ sessionId: "$9", sessionName: "web2", windowId: "@9", windowPath: "/w/webapp/app", scopes: SCOPES, state: STATE, attached: true });
   expect(plan.actions).toEqual([
     { kind: "move-window", windowId: "@9", session: "web" },
     { kind: "switch", target: "web" },
@@ -34,14 +34,20 @@ test("a new session in a taken scope is merged into the owner", () => {
   expect(plan.message).toBe("merged into web");
 });
 
+test("a detached session in a taken scope is merged into the owner without switching focus", () => {
+  const plan = adoptPlan({ sessionId: "$9", sessionName: "web2", windowId: "@9", windowPath: "/w/webapp/app", scopes: SCOPES, state: STATE, attached: false });
+  expect(plan.actions).toEqual([{ kind: "move-window", windowId: "@9", session: "web" }]);
+  expect(plan.message).toBe("merged into web");
+});
+
 test("a session already named after its scope is left alone", () => {
-  const plan = adoptPlan({ sessionId: "$0", sessionName: "web", windowId: "@0", windowPath: "/w/webapp", scopes: SCOPES, state: STATE });
+  const plan = adoptPlan({ sessionId: "$0", sessionName: "web", windowId: "@0", windowPath: "/w/webapp", scopes: SCOPES, state: STATE, attached: true });
   expect(plan.actions).toEqual([]);
   expect(plan.message).toBe("");
 });
 
 test("an unmatched path becomes the misc session", () => {
-  const plan = adoptPlan({ sessionId: "$9", sessionName: "notes", windowId: "@9", windowPath: "/w/downloads", scopes: SCOPES, state: STATE });
+  const plan = adoptPlan({ sessionId: "$9", sessionName: "notes", windowId: "@9", windowPath: "/w/downloads", scopes: SCOPES, state: STATE, attached: true });
   expect(plan.actions).toEqual([{ kind: "rename-session", id: "$9", name: "misc" }]);
   expect(plan.message).toBe("renamed notes to misc");
 });

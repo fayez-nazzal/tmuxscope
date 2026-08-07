@@ -90,7 +90,7 @@ function cmdAdopt(sessionId: string, scopes: Scope[]) {
   if (session) {
     const window = state.windows.find((entry) => entry.session === session.name);
     if (window) {
-      const plan = adoptPlan({ sessionId, sessionName: session.name, windowId: window.id, windowPath: window.path, scopes, state });
+      const plan = adoptPlan({ sessionId, sessionName: session.name, windowId: window.id, windowPath: window.path, scopes, state, attached: session.attached });
       for (const action of plan.actions) {
         tmux.apply(action);
       }
