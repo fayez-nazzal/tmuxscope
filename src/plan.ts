@@ -34,11 +34,34 @@ export function sessionForScope(state: TmuxState, scopes: Scope[], scope: string
   return found;
 }
 
+export function majorityScope(paths: string[], scopes: Scope[]): string {
+  const counts = new Map<string, number>();
+  for (const path of paths) {
+    const scope = resolveScope(path, scopes).scope;
+    const current = counts.get(scope);
+    let count = 1;
+    if (current) {
+      count = current + 1;
+    }
+    counts.set(scope, count);
+  }
+  let winner = MISC;
+  let best = 0;
+  for (const [scope, count] of counts) {
+    if (count > best) {
+      best = count;
+      winner = scope;
+    }
+  }
+  return winner;
+}
+
+export type AdoptWindow = { id: string; path: string };
+
 export type AdoptInput = {
   sessionId: string;
   sessionName: string;
-  windowId: string;
-  windowPath: string;
+  windows: AdoptWindow[];
   scopes: Scope[];
   state: TmuxState;
   attached: boolean;
@@ -48,18 +71,24 @@ export type AdoptPlan = { actions: Action[]; message: string };
 
 export function adoptPlan(input: AdoptInput): AdoptPlan {
   const plan: AdoptPlan = { actions: [], message: "" };
-  const scope = resolveScope(input.windowPath, input.scopes).scope;
-  const others = { sessions: input.state.sessions.filter((session) => session.id !== input.sessionId), windows: input.state.windows.filter((window) => window.session !== input.sessionName) };
-  const owner = sessionForScope(others, input.scopes, scope);
-  if (owner) {
-    plan.actions.push({ kind: "move-window", windowId: input.windowId, session: owner });
-    if (input.attached) {
-      plan.actions.push({ kind: "switch", target: owner });
+  const paths = input.windows.map((window) => window.path);
+  const scope = majorityScope(paths, input.scopes);
+  if (input.sessionName !== scope) {
+    const sessions = input.state.sessions.filter((session) => session.id !== input.sessionId);
+    const windows = input.state.windows.filter((window) => window.session !== input.sessionName);
+    const owner = sessionForScope({ sessions, windows }, input.scopes, scope);
+    if (owner) {
+      for (const window of input.windows) {
+        plan.actions.push({ kind: "move-window", windowId: window.id, session: owner });
+      }
+      if (input.attached) {
+        plan.actions.push({ kind: "switch", target: owner });
+      }
+      plan.message = `merged into ${owner}`;
+    } else {
+      plan.actions.push({ kind: "rename-session", id: input.sessionId, name: scope });
+      plan.message = `renamed ${input.sessionName} to ${scope}`;
     }
-    plan.message = `merged into ${owner}`;
-  } else if (input.sessionName !== scope) {
-    plan.actions.push({ kind: "rename-session", id: input.sessionId, name: scope });
-    plan.message = `renamed ${input.sessionName} to ${scope}`;
   }
   return plan;
 }
@@ -100,25 +129,7 @@ export type Report = { mixed: Mixed[]; split: Split[]; problems: number };
 
 function scopeOfSession(state: TmuxState, scopes: Scope[], session: string): string {
   const windows = state.windows.filter((window) => window.session === session);
-  const counts = new Map<string, number>();
-  for (const window of windows) {
-    const scope = resolveScope(window.path, scopes).scope;
-    const current = counts.get(scope);
-    let count = 1;
-    if (current) {
-      count = current + 1;
-    }
-    counts.set(scope, count);
-  }
-  let winner = MISC;
-  let best = 0;
-  for (const [scope, count] of counts) {
-    if (count > best) {
-      best = count;
-      winner = scope;
-    }
-  }
-  return winner;
+  return majorityScope(windows.map((window) => window.path), scopes);
 }
 
 export function doctorReport(state: TmuxState, scopes: Scope[]): Report {
