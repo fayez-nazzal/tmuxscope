@@ -132,3 +132,14 @@ test("doctor also reads the config, not only the sessions", () => {
   expect(result.stdout.toString()).toContain("? in a pattern");
   expect(result.stdout.toString()).toContain("missing directory");
 });
+
+test("--help documents every exit code the tool promises", () => {
+  const result = Bun.spawnSync(["bun", CLI, "--help"]);
+  const out = result.stdout.toString();
+  expect(out).toContain("EXIT CODES");
+  expect(out).toContain("0  clean");
+  expect(out).toContain("1  the invariant is still broken");
+  expect(out).toContain("2  bad input");
+  expect(out).toContain("3  wrong environment");
+  expect(out).toContain("4  a tmux call failed");
+});

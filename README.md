@@ -104,6 +104,14 @@ a lot of `cd` and you would rather it stayed in one place.
 Symlinked paths are resolved before matching, so `/tmp/work` and
 `/private/tmp/work` land in the same scope.
 
+## Exit codes
+
+    0  clean
+    1  the invariant is still broken (doctor found something, repair could not fix everything)
+    2  bad input (unknown command, broken config, unknown scope)
+    3  wrong environment (route run outside tmux or outside a pane)
+    4  a tmux call failed
+
 ## Tests
 
     bun test
