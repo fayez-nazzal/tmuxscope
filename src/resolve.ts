@@ -48,7 +48,7 @@ function canonicalPattern(pattern: string): string {
 }
 
 function patternRegExp(pattern: string): RegExp {
-  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+  const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
   const globbed = escaped.replace(/\*/g, "[^/]*");
   return new RegExp(`^${globbed}(/.*)?$`);
 }

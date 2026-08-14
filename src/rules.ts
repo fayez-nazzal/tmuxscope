@@ -2,11 +2,11 @@ import { MISC } from "./scopes.ts";
 import type { Scope } from "./scopes.ts";
 import { normalizePattern } from "./resolve.ts";
 
-const ZSH_LITERAL = /[^A-Za-z0-9_./-]/g;
+const ZSH_METACHARACTER = /[*?[\]()|^~#<>\\]/g;
 
 function zshGlob(pattern: string): string {
   const segments = normalizePattern(pattern).split("*");
-  const escaped = segments.map((segment) => segment.replace(ZSH_LITERAL, "\\$&"));
+  const escaped = segments.map((segment) => segment.replace(ZSH_METACHARACTER, "\\$&"));
   return `${escaped.join("[^/]#")}(|/*)`;
 }
 
