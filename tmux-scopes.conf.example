@@ -1,0 +1,24 @@
+# tmuxscope scopes
+#
+# Copy this file to ~/.config/tmux-scopes.conf and edit it to match your machine.
+# One line per scope, in the form:
+#
+#     name = path [path ...]
+#
+# Replace everything below with your own projects. These are only examples.
+
+# A single project directory. It owns everything beneath it.
+web = ~/code/webapp
+
+# A scope can own several directories at once.
+api = ~/code/api-service ~/work/api-service
+
+# A star matches the last part of a path, which is handy for git worktrees.
+# This one catches ~/code/infra, ~/code/infra-staging and ~/code/infra.hotfix.
+infra = ~/code/infra*
+
+# Carve a subdirectory out of a wider scope by naming it separately.
+# The longer pattern wins, so ~/code/webapp/docs lands in "docs", not "web".
+docs = ~/code/webapp/docs
+
+# Anything you do not claim here belongs to the built-in "misc" scope.

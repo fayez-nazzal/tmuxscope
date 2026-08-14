@@ -10,12 +10,12 @@ test("parseConfig reads each scope name and its patterns", () => {
 });
 
 test("parseConfig ignores blank lines and comments", () => {
-  const text = "# scopes\n\nruby = ~/code/db-service*\n";
-  expect(parseConfig(text)).toEqual([{ name: "db", patterns: ["~/code/db-service*"] }]);
+  const text = "# scopes\n\ndb = ~/code/api-db*\n";
+  expect(parseConfig(text)).toEqual([{ name: "db", patterns: ["~/code/api-db*"] }]);
 });
 
 test("parseConfig reports the line number of a line without an equals sign", () => {
-  expect(() => parseConfig("api = ~/a\nruby ~/b\n")).toThrow(/line 2/);
+  expect(() => parseConfig("api = ~/a\ndb ~/b\n")).toThrow(/line 2/);
 });
 
 test("parseConfig rejects a scope with no patterns", () => {

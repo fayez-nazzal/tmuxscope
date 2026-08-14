@@ -1,58 +1,113 @@
 # tmuxscope
 
-One tmux session per project scope, one scope per session.
+One tmux session per project, automatically.
+
+You tell tmuxscope which directories belong to which project. From then on your
+sessions organise themselves. `cd` into a project and you land in that project
+session. `cd` somewhere else and you land somewhere else. No manual session
+juggling, and no drawer of half-named sessions by Friday.
+
+## How it works
+
+A **scope** is a name plus the paths it owns.
+
+    web = ~/code/webapp
+
+Every directory belongs to exactly one scope, and every scope gets at most one
+tmux session. Those two rules are the whole idea. Anything you have not claimed
+belongs to a built-in scope called `misc`.
+
+When a `cd` takes a pane out of its scope, tmuxscope opens the directory in the
+right session and returns your pane to where it was. Your shell stays put. Your
+work moves.
+
+## Requirements
+
+tmux 3.0 or newer, zsh, and [bun](https://bun.sh).
 
 ## Install
 
+    git clone https://github.com/fayez-nazzal/tmuxscope.git
+    cd tmuxscope
     bun link
+
+Add the two hooks.
+
     printf '\neval "$(tmuxscope hook zsh)"\n' >> ~/.zshrc
     printf "\nrun-shell 'tmuxscope hook tmux | tmux source -'\n" >> ~/.tmux.conf
 
-## Config
+Open a new shell, or run `source ~/.zshrc` and `tmux source ~/.tmux.conf`.
 
-`~/.config/tmux-scopes.conf`, one scope per line.
+## Configure
+
+Your scopes live in `~/.config/tmux-scopes.conf`. This file is yours and stays on
+your machine. Copy the example to get started.
+
+    mkdir -p ~/.config
+    cp tmux-scopes.conf.example ~/.config/tmux-scopes.conf
+    $EDITOR ~/.config/tmux-scopes.conf
+
+One scope per line, in the form `name = path [path ...]`.
 
     api = ~/code/api-service*
-    web   = ~/webapp ~/repos/webapp
+    web = ~/code/webapp ~/work/webapp
+    dots = ~/.config
 
-Patterns cover subdirectories. A star is allowed only in the last part of the path.
-On overlap the longest pattern wins. Anything unmatched belongs to `misc`.
+Run `tmuxscope list` to check what you wrote, and `tmuxscope resolve <path>` to
+ask which scope owns a directory.
 
-## Commands
+A few things worth knowing.
 
-    tmuxscope go <scope or path>    attach the scope session, creating it if needed
-    tmuxscope list                  every scope, its session and its patterns
-    tmuxscope doctor                report sessions that break the rules
-    tmuxscope repair [--dry-run]    move stray windows and merge duplicates
-    tmuxscope resolve <path>        print the scope owning a path
-    tmuxscope rules <path>          print the zsh fast path rules of that scope
-    tmuxscope hook zsh | tmux       print the glue to install
+- A pattern covers everything beneath it, so `~/code/webapp` owns `~/code/webapp/src`.
+- A star is allowed only in the last part of a path. `~/code/api-*` works, `~/*/api` does not.
+- Stars are handy for git worktrees, where `~/code/api-*` catches `api-service` and `api-service.hotfix` alike.
+- When two patterns match, the longer one wins, so you can carve a subdirectory out of a wider scope.
+- Scope names may use letters, digits, dash and underscore. `misc` is reserved.
 
-Set `TMUXSCOPE_OFF=1` to disable routing in one shell.
+Start small. Three or four scopes for the projects you actually switch between
+beats a line for every directory you own.
 
-`go` starts the session in a directory that belongs to the scope. If a star pattern
-matches nothing on disk it says so and creates nothing.
+## Daily use
 
-`repair` only touches the sessions `doctor` names. A session it reports as clean keeps
-its name and its windows.
+Mostly you just `cd` and let the hooks work. Four commands cover the rest.
 
-`globs` is the older name of `rules`, kept so a shell opened before the rename keeps
-working until it is restarted.
+    tmuxscope go <scope>    jump to a scope, creating its session if needed
+    tmuxscope list          every scope, its session and its patterns
+    tmuxscope doctor        report sessions that break the two rules
+    tmuxscope repair        fix what doctor reported
 
-## Limits
+`go` also takes a path, so `tmuxscope go ~/code/webapp` works without you
+remembering the scope name.
 
-Paths are compared as written, with no symlink resolution. zsh reports the logical
-`$PWD` while tmux reports the physical `pane_current_path`, so a scope reached
-through a symlink can resolve one way in the shell and another way in tmux, for
-example `/tmp/work` against `/private/tmp/work`. Point scope patterns at real paths.
+Run `doctor` when something feels off. It explains what it found and changes
+nothing. `repair` then acts only on the sessions `doctor` named, and
+`repair --dry-run` shows you the plan first.
+
+Sessions you made by hand are welcome. A new session is renamed to match its
+scope, or folded into that scope's session when one already exists. A session
+you are attached to is never dismantled underneath you.
+
+## Turning it off
+
+    TMUXSCOPE_OFF=1
+
+Set it in a shell to stop routing for that shell only. Useful when a script does
+a lot of `cd` and you would rather it stayed in one place.
+
+## Everything else
+
+    tmuxscope resolve <path>     which scope owns this path
+    tmuxscope rules <path>       the zsh fast path rules for that scope
+    tmuxscope hook zsh | tmux    print the glue to install
+    tmuxscope --help
+
+Symlinked paths are resolved before matching, so `/tmp/work` and
+`/private/tmp/work` land in the same scope.
 
 ## Tests
 
     bun test
 
-Live verification against a real, isolated tmux server exercised routing, scratch
-pane cleanup, session creation, duplicate merging, and `doctor`, end to end. See
-`.superpowers/sdd/2026-08-06-tmuxscope/task-9-report.md` for the full log, including
-two hook-triggered bugs that were found and fixed along the way (`route` mis-locating
-the origin pane, and the tmux hook losing the session id to shell positional-parameter
-expansion).
+## License
+
+MIT
