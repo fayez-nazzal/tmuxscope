@@ -119,3 +119,8 @@ test("the zsh fast path agrees with resolveScope for every scope and path", () =
     expect(verdicts).toEqual(expected);
   }
 });
+
+test("a ? in a pattern matches itself literally, never as a single-character wildcard", () => {
+  expect(matchScore("~/a?b", `${HOME}/axb`)).toBe(-1);
+  expect(matchScore("~/a?b", `${HOME}/a?b`)).toBeGreaterThan(0);
+});

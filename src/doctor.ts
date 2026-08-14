@@ -1,5 +1,5 @@
 import type { Scope } from "./scopes.ts";
-import { resolveScope } from "./resolve.ts";
+import { normalizePattern, resolveScope } from "./resolve.ts";
 import { ascendingName, majorityForSession } from "./ownership.ts";
 import type { TmuxState } from "./tmux.ts";
 
@@ -51,4 +51,80 @@ export function doctorReport(state: TmuxState, scopes: Scope[]): Report {
   }
   report.problems = report.mixed.length + report.split.length + report.ambiguous.length;
   return report;
+}
+
+export type ConfigFinding =
+  | { kind: "ambiguousLength"; scopes: string[]; length: number }
+  | { kind: "missingDirectory"; scope: string; pattern: string }
+  | { kind: "duplicateDirectory"; scopes: string[]; directory: string }
+  | { kind: "questionMark"; scope: string; pattern: string };
+
+export type ConfigProbe = { exists: (path: string) => boolean };
+
+function groupsWithMoreThanOneScope<Key>(entries: { scope: string; key: Key }[]): Map<Key, string[]> {
+  const grouped = new Map<Key, string[]>();
+  for (const entry of entries) {
+    const names = grouped.get(entry.key);
+    let group: string[] = [];
+    if (names) {
+      group = names;
+    }
+    if (!group.includes(entry.scope)) {
+      group.push(entry.scope);
+    }
+    grouped.set(entry.key, group);
+  }
+  for (const [key, names] of grouped) {
+    if (names.length < 2) {
+      grouped.delete(key);
+    }
+  }
+  return grouped;
+}
+
+function ambiguousLengthFindings(scopes: Scope[]): ConfigFinding[] {
+  const entries = scopes.flatMap((scope) => scope.patterns.map((pattern) => ({ scope: scope.name, key: normalizePattern(pattern).length })));
+  const grouped = groupsWithMoreThanOneScope(entries);
+  const lengths = [...grouped.keys()].sort((left, right) => left - right);
+  return lengths.map((length) => ({ kind: "ambiguousLength" as const, scopes: grouped.get(length)!.slice().sort(ascendingName), length }));
+}
+
+function duplicateDirectoryFindings(scopes: Scope[]): ConfigFinding[] {
+  const entries = scopes.flatMap((scope) => scope.patterns.map((pattern) => ({ scope: scope.name, key: normalizePattern(pattern) })));
+  const grouped = groupsWithMoreThanOneScope(entries);
+  const directories = [...grouped.keys()].sort(ascendingName);
+  return directories.map((directory) => ({ kind: "duplicateDirectory" as const, scopes: grouped.get(directory)!.slice().sort(ascendingName), directory }));
+}
+
+function missingDirectoryFindings(scopes: Scope[], probe: ConfigProbe): ConfigFinding[] {
+  const findings: ConfigFinding[] = [];
+  for (const scope of scopes) {
+    for (const pattern of scope.patterns) {
+      if (!pattern.includes("*") && !probe.exists(normalizePattern(pattern))) {
+        findings.push({ kind: "missingDirectory", scope: scope.name, pattern });
+      }
+    }
+  }
+  return findings;
+}
+
+function questionMarkFindings(scopes: Scope[]): ConfigFinding[] {
+  const findings: ConfigFinding[] = [];
+  for (const scope of scopes) {
+    for (const pattern of scope.patterns) {
+      if (pattern.includes("?")) {
+        findings.push({ kind: "questionMark", scope: scope.name, pattern });
+      }
+    }
+  }
+  return findings;
+}
+
+export function configReport(scopes: Scope[], probe: ConfigProbe): ConfigFinding[] {
+  return [
+    ...ambiguousLengthFindings(scopes),
+    ...missingDirectoryFindings(scopes, probe),
+    ...duplicateDirectoryFindings(scopes),
+    ...questionMarkFindings(scopes),
+  ];
 }

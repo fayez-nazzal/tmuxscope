@@ -122,3 +122,13 @@ test("go refuses a scope with no directory on disk instead of creating a session
   expect(result.exitCode).toBe(2);
   expect(result.stderr.toString()).toContain("has no directory to start in");
 });
+
+test("doctor also reads the config, not only the sessions", () => {
+  const config = configFile("quest = /nowhere/weird?dir\n");
+  const stub = stubbedTmux();
+  const env = { ...process.env, TMUXSCOPE_CONFIG: config, PATH: `${stub}:${process.env.PATH}` };
+  const result = Bun.spawnSync(["bun", CLI, "doctor"], { env });
+  expect(result.exitCode).toBe(1);
+  expect(result.stdout.toString()).toContain("? in a pattern");
+  expect(result.stdout.toString()).toContain("missing directory");
+});

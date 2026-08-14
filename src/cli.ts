@@ -8,12 +8,12 @@ import { resolveScope } from "./resolve.ts";
 import { zshRules } from "./rules.ts";
 import { adoptPlan } from "./adopt.ts";
 import type { AdoptWindow } from "./adopt.ts";
-import { doctorReport } from "./doctor.ts";
+import { configReport, doctorReport } from "./doctor.ts";
 import { listRows, sessionForScope } from "./ownership.ts";
 import { repairPlan } from "./repair.ts";
 import { routePlan } from "./route.ts";
 import type { RouteInput } from "./route.ts";
-import { renderAction, renderDoctor, renderList } from "./render.ts";
+import { renderAction, renderConfigReport, renderDoctor, renderList } from "./render.ts";
 import { goTarget } from "./go.ts";
 import type { GoTarget, PathProbe } from "./go.ts";
 import { applyAll, tmux } from "./tmux.ts";
@@ -134,8 +134,10 @@ function cmdList(client: Tmux, scopes: Scope[]) {
 
 function cmdDoctor(client: Tmux, scopes: Scope[]) {
   const report = doctorReport(client.state(), scopes);
+  const findings = configReport(scopes, { exists: existsSync });
   process.stdout.write(renderDoctor(report));
-  if (report.problems > 0) {
+  process.stdout.write(renderConfigReport(findings));
+  if (report.problems > 0 || findings.length > 0) {
     process.exit(1);
   }
 }

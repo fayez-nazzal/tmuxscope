@@ -1,5 +1,5 @@
 import type { Row } from "./ownership.ts";
-import type { Report } from "./doctor.ts";
+import type { ConfigFinding, Report } from "./doctor.ts";
 import type { Action } from "./tmux.ts";
 
 function pad(text: string, width: number): string {
@@ -67,6 +67,32 @@ export function renderDoctor(report: Report): string {
     lines.push("run tmuxscope repair to fix");
   }
   return `${lines.join("\n")}\n`;
+}
+
+function renderFinding(finding: ConfigFinding): string {
+  let text = "";
+  if (finding.kind === "ambiguousLength") {
+    text = `ambiguous length ${finding.length}: ${finding.scopes.join(", ")} have equal-length patterns, config order breaks the tie`;
+  }
+  if (finding.kind === "missingDirectory") {
+    text = `missing directory: scope ${finding.scope} pattern ${finding.pattern} does not exist`;
+  }
+  if (finding.kind === "duplicateDirectory") {
+    text = `duplicate directory ${finding.directory}: claimed by ${finding.scopes.join(", ")}`;
+  }
+  if (finding.kind === "questionMark") {
+    text = `? in a pattern: scope ${finding.scope} pattern ${finding.pattern}, ? matches itself literally, not any character`;
+  }
+  return text;
+}
+
+export function renderConfigReport(findings: ConfigFinding[]): string {
+  let text = "";
+  if (findings.length > 0) {
+    const lines = findings.map((finding) => renderFinding(finding));
+    text = `${lines.join("\n")}\n`;
+  }
+  return text;
 }
 
 export function renderAction(action: Action): string {
