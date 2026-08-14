@@ -10,20 +10,6 @@ function zshGlob(pattern: string): string {
   return `${escaped.join("[^/]#")}(|/*)`;
 }
 
-export function zshGlobs(scopeName: string, scopes: Scope[]): string[] {
-  const globs: string[] = [];
-  for (const scope of scopes) {
-    if (scope.name === scopeName) {
-      for (const pattern of scope.patterns) {
-        const expanded = normalizePattern(pattern);
-        globs.push(expanded);
-        globs.push(`${expanded}/*`);
-      }
-    }
-  }
-  return globs;
-}
-
 export function zshRules(scopeName: string, scopes: Scope[]): string[] {
   const ranked: { length: number; rule: string }[] = [];
   for (const scope of scopes) {
