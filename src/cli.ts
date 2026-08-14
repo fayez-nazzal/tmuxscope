@@ -11,6 +11,7 @@ import type { AdoptWindow } from "./adopt.ts";
 import { configReport, doctorReport } from "./doctor.ts";
 import { listRows, sessionForScope } from "./ownership.ts";
 import { repairPlan } from "./repair.ts";
+import type { RepairResult } from "./repair.ts";
 import { routePlan } from "./route.ts";
 import type { RouteInput } from "./route.ts";
 import { renderAction, renderConfigReport, renderDoctor, renderList } from "./render.ts";
@@ -19,8 +20,9 @@ import type { GoTarget, PathProbe } from "./go.ts";
 import { applyAll, tmux } from "./tmux.ts";
 import type { Action, Tmux, TmuxState } from "./tmux.ts";
 import { TMUX_HOOK, ZSH_HOOK } from "./hooks.ts";
+import packageJson from "../package.json";
 
-export const VERSION = "0.1.0";
+export const VERSION = packageJson.version;
 
 const HELP = `tmuxscope ${VERSION} — one tmux session per project scope
 
@@ -30,9 +32,9 @@ USAGE
   tmuxscope route <path>              hook entry point for a cd that left the scope
   tmuxscope adopt <session-id>        hook entry point for a new session
   tmuxscope go <scope or path>        attach the scope session, creating it if needed
-  tmuxscope list                      every scope, its session and its patterns
-  tmuxscope doctor                    report sessions that break the rules
-  tmuxscope repair [--dry-run]        move stray windows and merge duplicates
+  tmuxscope list [--json]             every scope, its session and its patterns
+  tmuxscope doctor [--json]           report sessions that break the rules
+  tmuxscope repair [--dry-run] [--json]  move stray windows and merge duplicates
   tmuxscope hook zsh | tmux          print the glue to install
   tmuxscope -h | --help
   tmuxscope -v | --version
@@ -135,15 +137,28 @@ export function cmdAdopt(client: Tmux, sessionId: string, scopes: Scope[]) {
   }
 }
 
-function cmdList(client: Tmux, scopes: Scope[]) {
-  process.stdout.write(renderList(listRows(client.state(), scopes)));
+function writeJson(value: unknown) {
+  process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
 }
 
-function cmdDoctor(client: Tmux, scopes: Scope[]) {
+export function cmdList(client: Tmux, scopes: Scope[], json: boolean) {
+  const rows = listRows(client.state(), scopes);
+  if (json) {
+    writeJson({ rows });
+  } else {
+    process.stdout.write(renderList(rows));
+  }
+}
+
+export function cmdDoctor(client: Tmux, scopes: Scope[], json: boolean) {
   const report = doctorReport(client.state(), scopes);
   const findings = configReport(scopes, { exists: existsSync });
-  process.stdout.write(renderDoctor(report));
-  process.stdout.write(renderConfigReport(findings));
+  if (json) {
+    writeJson({ ...report, config: findings });
+  } else {
+    process.stdout.write(renderDoctor(report));
+    process.stdout.write(renderConfigReport(findings));
+  }
   if (report.problems > 0 || findings.length > 0) {
     process.exit(1);
   }
@@ -159,16 +174,24 @@ function loggingClient(client: Tmux): Tmux {
   };
 }
 
-export function cmdRepair(client: Tmux, scopes: Scope[], dryRun: boolean) {
-  const state = client.state();
-  const plan = repairPlan(doctorReport(state, scopes), state, scopes);
-  if (plan.unsatisfiable.length > 0) {
-    process.stderr.write("repair cannot order these moves without a spare session:\n");
-    for (const description of plan.unsatisfiable) {
-      process.stderr.write(`  ${description}\n`);
+function cmdRepairJson(client: Tmux, scopes: Scope[], plan: RepairResult, dryRun: boolean) {
+  if (dryRun) {
+    writeJson({ actions: plan.actions, unsatisfiable: [], applied: false });
+  } else {
+    const failure = applyAll(client, plan.actions);
+    if (failure !== "") {
+      writeJson({ actions: plan.actions, unsatisfiable: [], applied: false, error: failure });
+      process.exit(4);
     }
-    process.exit(1);
+    const after = doctorReport(client.state(), scopes);
+    writeJson({ actions: plan.actions, unsatisfiable: [], applied: true, after });
+    if (after.problems > 0) {
+      process.exit(1);
+    }
   }
+}
+
+function cmdRepairText(client: Tmux, scopes: Scope[], plan: RepairResult, dryRun: boolean) {
   if (plan.actions.length === 0) {
     process.stdout.write("all clean\n");
   }
@@ -187,6 +210,27 @@ export function cmdRepair(client: Tmux, scopes: Scope[], dryRun: boolean) {
       process.stdout.write(renderDoctor(after));
       process.exit(1);
     }
+  }
+}
+
+export function cmdRepair(client: Tmux, scopes: Scope[], dryRun: boolean, json: boolean) {
+  const state = client.state();
+  const plan = repairPlan(doctorReport(state, scopes), state, scopes);
+  if (plan.unsatisfiable.length > 0) {
+    if (json) {
+      writeJson({ actions: [], unsatisfiable: plan.unsatisfiable, applied: false });
+    } else {
+      process.stderr.write("repair cannot order these moves without a spare session:\n");
+      for (const description of plan.unsatisfiable) {
+        process.stderr.write(`  ${description}\n`);
+      }
+    }
+    process.exit(1);
+  }
+  if (json) {
+    cmdRepairJson(client, scopes, plan, dryRun);
+  } else {
+    cmdRepairText(client, scopes, plan, dryRun);
   }
 }
 
@@ -263,11 +307,11 @@ function dispatch(client: Tmux, command: string, positionals: string[], flags: s
   } else if (command === "adopt") {
     cmdAdopt(client, positionals[1] || "", scopes);
   } else if (command === "list") {
-    cmdList(client, scopes);
+    cmdList(client, scopes, flags.includes("--json"));
   } else if (command === "doctor") {
-    cmdDoctor(client, scopes);
+    cmdDoctor(client, scopes, flags.includes("--json"));
   } else if (command === "repair") {
-    cmdRepair(client, scopes, flags.includes("--dry-run"));
+    cmdRepair(client, scopes, flags.includes("--dry-run"), flags.includes("--json"));
   } else if (command === "go") {
     cmdGo(client, positionals[1] || "", scopes);
   } else {

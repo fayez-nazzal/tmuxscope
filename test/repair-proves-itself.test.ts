@@ -81,7 +81,7 @@ test("a fake whose third apply throws prints only the landed actions, names the 
   const exit = fakeExit();
   let threw = false;
   try {
-    cmdRepair(client, SCOPES, false);
+    cmdRepair(client, SCOPES, false, false);
   } catch (error) {
     threw = true;
   }
@@ -133,7 +133,7 @@ test("a fixable state ends clean and exits with no error", () => {
   const exit = fakeExit();
   let threw = false;
   try {
-    cmdRepair(client, SCOPES, false);
+    cmdRepair(client, SCOPES, false, false);
   } catch (error) {
     threw = true;
   }

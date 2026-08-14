@@ -143,3 +143,20 @@ test("--help documents every exit code the tool promises", () => {
   expect(out).toContain("3  wrong environment");
   expect(out).toContain("4  a tmux call failed");
 });
+
+test("doctor --json keeps exit code 1 and carries the config findings", () => {
+  const config = configFile("quest = /nowhere/weird?dir\n");
+  const stub = stubbedTmux();
+  const env = { ...process.env, TMUXSCOPE_CONFIG: config, PATH: `${stub}:${process.env.PATH}` };
+  const result = Bun.spawnSync(["bun", CLI, "doctor", "--json"], { env });
+  expect(result.exitCode).toBe(1);
+  const report = JSON.parse(result.stdout.toString());
+  expect(report).toMatchObject({ mixed: [], split: [], ambiguous: [], problems: 0 });
+  expect(report.config.length).toBe(2);
+});
+
+test("--version reports the version in package.json", () => {
+  const packageJson = require("../package.json") as { version: string };
+  const result = Bun.spawnSync(["bun", CLI, "--version"]);
+  expect(result.stdout.toString().trim()).toBe(packageJson.version);
+});

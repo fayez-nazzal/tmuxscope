@@ -4,12 +4,17 @@
   "description": "One tmux session per project scope, one scope per session.",
   "type": "module",
   "bin": {
-    "tmuxscope": "src/cli.ts"
+    "tmuxscope": "dist/tmuxscope"
   },
   "files": [
-    "src"
+    "src",
+    "dist"
   ],
+  "engines": {
+    "bun": ">=1.2.0"
+  },
   "scripts": {
+    "build": "bun build --compile ./src/cli.ts --outfile dist/tmuxscope",
     "test": "bun test"
   },
   "devDependencies": {
