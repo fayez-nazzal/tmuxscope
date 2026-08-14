@@ -275,7 +275,7 @@ export function doctorReport(state: TmuxState, scopes: Scope[]): Report {
 
 type Destination = { id: string; name: string };
 type Move = { windowId: string; from: string; destination: Destination };
-type Ordering = { actions: Action[]; stuck: boolean };
+type Ordering = { actions: Action[]; stuck: boolean; unresolved: string[] };
 
 function reportedNames(report: Report): Set<string> {
   const names = new Set<string>();
@@ -368,7 +368,7 @@ function needsFilling(counts: Map<string, number>, pending: Move[], id: string):
 }
 
 function orderedMoves(moves: Move[], counts: Map<string, number>): Ordering {
-  const ordering: Ordering = { actions: [], stuck: false };
+  const ordering: Ordering = { actions: [], stuck: false, unresolved: [] };
   const pending = moves.slice();
   while (pending.length > 0 && !ordering.stuck) {
     let picked = -1;
@@ -401,8 +401,9 @@ function orderedMoves(moves: Move[], counts: Map<string, number>): Ordering {
       ordering.actions.push({ kind: "move-window", windowId: move.windowId, session: move.destination.name });
     }
   }
-  for (const move of pending) {
-    ordering.actions.push({ kind: "move-window", windowId: move.windowId, session: move.destination.name });
+  if (ordering.stuck) {
+    ordering.actions = [];
+    ordering.unresolved = pending.map((move) => `${move.windowId} -> ${move.destination.name}`);
   }
   return ordering;
 }
@@ -466,17 +467,29 @@ function buildRepair(report: Report, state: TmuxState, scopes: Scope[], reuseDra
     }
   }
   const ordering = orderedMoves(moves, counts);
-  return { actions: [...actions, ...ordering.actions], stuck: ordering.stuck };
+  let combinedActions: Action[] = [...actions, ...ordering.actions];
+  if (ordering.stuck) {
+    combinedActions = [];
+  }
+  return { actions: combinedActions, stuck: ordering.stuck, unresolved: ordering.unresolved };
 }
 
-export function repairPlan(report: Report, state: TmuxState, scopes: Scope[]): Action[] {
-  let actions: Action[] = [];
+export type RepairResult = { actions: Action[]; unsatisfiable: string[] };
+
+export function repairPlan(report: Report, state: TmuxState, scopes: Scope[]): RepairResult {
+  let result: RepairResult = { actions: [], unsatisfiable: [] };
   if (report.problems > 0) {
     const preferred = buildRepair(report, state, scopes, true);
-    actions = preferred.actions;
-    if (preferred.stuck) {
-      actions = buildRepair(report, state, scopes, false).actions;
+    if (!preferred.stuck) {
+      result = { actions: preferred.actions, unsatisfiable: [] };
+    } else {
+      const fallback = buildRepair(report, state, scopes, false);
+      if (!fallback.stuck) {
+        result = { actions: fallback.actions, unsatisfiable: [] };
+      } else {
+        result = { actions: [], unsatisfiable: fallback.unresolved };
+      }
     }
   }
-  return actions;
+  return result;
 }

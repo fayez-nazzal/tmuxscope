@@ -125,7 +125,7 @@ function applyActions(state: TmuxState, actions: Action[]): TmuxState {
 }
 
 function repair(state: TmuxState): TmuxState {
-  const actions = repairPlan(doctorReport(state, SCOPES), state, SCOPES);
+  const actions = repairPlan(doctorReport(state, SCOPES), state, SCOPES).actions;
   return applyActions(state, actions);
 }
 
@@ -164,7 +164,7 @@ test("repair fills a contested loser session before it drains it", () => {
   const report = doctorReport(CONTESTED_LOSER, SCOPES);
   expect(report.problems).toBeGreaterThan(0);
   expect(report.ambiguous).toEqual([{ session: "api", candidates: ["api", "web"], count: 1, rule: "session name matches scope name" }]);
-  const actions = repairPlan(report, CONTESTED_LOSER, SCOPES);
+  const actions = repairPlan(report, CONTESTED_LOSER, SCOPES).actions;
   expect(actions).toEqual([
     { kind: "new-session", name: "web-2", cwd: "/w/webapp" },
     { kind: "move-window", windowId: "@1", session: "web" },
@@ -179,7 +179,7 @@ test("repair leaves a session doctor reports as clean untouched", () => {
   const report = doctorReport(MIXED_BESIDE_CLEAN, SCOPES);
   expect(report.mixed.map((mixed) => mixed.session)).toEqual(["work"]);
   expect(report.split).toEqual([]);
-  const actions = repairPlan(report, MIXED_BESIDE_CLEAN, SCOPES);
+  const actions = repairPlan(report, MIXED_BESIDE_CLEAN, SCOPES).actions;
   expect(touched(actions, MIXED_BESIDE_CLEAN, "main")).toBe(false);
   expect(actions).toEqual([
     { kind: "rename-session", id: "$0", name: "web" },
@@ -193,7 +193,7 @@ test("repair leaves a session doctor reports as clean untouched", () => {
 test("repair never renames a session doctor did not report, even to home a stray window", () => {
   const report = doctorReport(MIXED_HOLDING_HOME, SCOPES);
   expect(report.mixed.map((mixed) => mixed.session)).toEqual(["work"]);
-  const actions = repairPlan(report, MIXED_HOLDING_HOME, SCOPES);
+  const actions = repairPlan(report, MIXED_HOLDING_HOME, SCOPES).actions;
   const renamed = actions.filter((action) => action.kind === "rename-session");
   expect(renamed).toEqual([{ kind: "rename-session", id: "$0", name: "web" }]);
   const drained = actions.filter((action) => action.kind === "move-window" && ["@3", "@4"].includes(action.windowId));
@@ -205,7 +205,7 @@ test("repair never renames a session doctor did not report, even to home a stray
 test("repair converges when two mixed sessions hold windows of the same third scope", () => {
   const before = doctorReport(TWO_MIXED, SCOPES);
   expect(before.problems).toBeGreaterThan(0);
-  const actions = repairPlan(before, TWO_MIXED, SCOPES);
+  const actions = repairPlan(before, TWO_MIXED, SCOPES).actions;
   expect(actions).toEqual([
     { kind: "new-session", name: "web", cwd: "/w/webapp" },
     { kind: "move-window", windowId: "@2", session: "web" },
@@ -213,13 +213,13 @@ test("repair converges when two mixed sessions hold windows of the same third sc
   ]);
   const after = repair(TWO_MIXED);
   expect(doctorReport(after, SCOPES).problems).toBe(0);
-  expect(repairPlan(doctorReport(after, SCOPES), after, SCOPES)).toEqual([]);
+  expect(repairPlan(doctorReport(after, SCOPES), after, SCOPES).actions).toEqual([]);
 });
 
 test("repair never plans a session name that already exists", () => {
   const before = doctorReport(NAME_COLLISION, SCOPES);
   expect(before.problems).toBeGreaterThan(0);
-  const actions = repairPlan(before, NAME_COLLISION, SCOPES);
+  const actions = repairPlan(before, NAME_COLLISION, SCOPES).actions;
   expect(actions).toEqual([
     { kind: "new-session", name: "web", cwd: "/w/webapp" },
     { kind: "move-window", windowId: "@0", session: "web" },
@@ -227,7 +227,7 @@ test("repair never plans a session name that already exists", () => {
   ]);
   const after = repair(NAME_COLLISION);
   expect(doctorReport(after, SCOPES).problems).toBe(0);
-  expect(repairPlan(doctorReport(after, SCOPES), after, SCOPES)).toEqual([]);
+  expect(repairPlan(doctorReport(after, SCOPES), after, SCOPES).actions).toEqual([]);
 });
 
 test("repair only ever moves windows, it never kills them", () => {
@@ -301,10 +301,10 @@ test("a fuzz over three thousand broken states plans nothing unapplicable and al
     const report = doctorReport(state, SCOPES);
     if (report.problems > 0) {
       checked = checked + 1;
-      const actions = repairPlan(report, state, SCOPES);
+      const actions = repairPlan(report, state, SCOPES).actions;
       const after = applyActions(state, actions);
       expect(doctorReport(after, SCOPES).problems).toBe(0);
-      expect(repairPlan(doctorReport(after, SCOPES), after, SCOPES)).toEqual([]);
+      expect(repairPlan(doctorReport(after, SCOPES), after, SCOPES).actions).toEqual([]);
       for (const window of state.windows) {
         expect(after.windows.some((entry) => entry.id === window.id)).toBe(true);
       }

@@ -49,20 +49,25 @@ test("a scope spread over two sessions is reported as split", () => {
   expect(report.split).toEqual([{ scope: "api", sessions: ["api", "api-2"] }]);
 });
 
+test("repairPlan never leaves the unsatisfiable list empty and the actions list non-empty at the same time", () => {
+  const cleanState: TmuxState = { sessions: [{ id: "$0", name: "web", windows: 1, attached: true }], windows: [{ id: "@0", index: 1, session: "web", path: "/w/webapp" }] };
+  expect(repairPlan(doctorReport(cleanState, SCOPES), cleanState, SCOPES)).toEqual({ actions: [], unsatisfiable: [] });
+});
+
 test("repair moves a stray window to the owning session", () => {
   const state: TmuxState = { sessions: [...MIXED.sessions, { id: "$1", name: "web", windows: 1, attached: false }], windows: [...MIXED.windows, { id: "@2", index: 1, session: "web", path: "/w/webapp" }] };
-  expect(repairPlan(doctorReport(state, SCOPES), state, SCOPES)).toEqual([{ kind: "move-window", windowId: "@1", session: "web" }]);
+  expect(repairPlan(doctorReport(state, SCOPES), state, SCOPES).actions).toEqual([{ kind: "move-window", windowId: "@1", session: "web" }]);
 });
 
 test("repair creates the owning session when it does not exist", () => {
-  expect(repairPlan(doctorReport(MIXED, SCOPES), MIXED, SCOPES)).toEqual([
+  expect(repairPlan(doctorReport(MIXED, SCOPES), MIXED, SCOPES).actions).toEqual([
     { kind: "new-session", name: "web", cwd: "/w/webapp" },
     { kind: "move-window", windowId: "@1", session: "web" },
   ]);
 });
 
 test("repair folds a split scope into the attached session", () => {
-  expect(repairPlan(doctorReport(SPLIT, SCOPES), SPLIT, SCOPES)).toEqual([{ kind: "move-window", windowId: "@2", session: "api" }]);
+  expect(repairPlan(doctorReport(SPLIT, SCOPES), SPLIT, SCOPES).actions).toEqual([{ kind: "move-window", windowId: "@2", session: "api" }]);
 });
 
 test("repair renames the session that already holds a scope instead of creating a twin", () => {
@@ -78,7 +83,7 @@ test("repair renames the session that already holds a scope instead of creating 
       { id: "@3", index: 1, session: "api2", path: "/w/api-service.tasks-2" },
     ],
   };
-  const actions = repairPlan(doctorReport(state, SCOPES), state, SCOPES);
+  const actions = repairPlan(doctorReport(state, SCOPES), state, SCOPES).actions;
   expect(actions).toEqual([
     { kind: "rename-session", id: "$1", name: "api" },
     { kind: "move-window", windowId: "@0", session: "api" },

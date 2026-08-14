@@ -143,11 +143,18 @@ function cmdDoctor(client: Tmux, scopes: Scope[]) {
 
 function cmdRepair(client: Tmux, scopes: Scope[], dryRun: boolean) {
   const state = client.state();
-  const actions = repairPlan(doctorReport(state, scopes), state, scopes);
-  if (actions.length === 0) {
+  const plan = repairPlan(doctorReport(state, scopes), state, scopes);
+  if (plan.unsatisfiable.length > 0) {
+    process.stderr.write("repair cannot order these moves without a spare session:\n");
+    for (const description of plan.unsatisfiable) {
+      process.stderr.write(`  ${description}\n`);
+    }
+    process.exit(1);
+  }
+  if (plan.actions.length === 0) {
     process.stdout.write("all clean\n");
   }
-  for (const action of actions) {
+  for (const action of plan.actions) {
     if (dryRun) {
       process.stdout.write(`would ${renderAction(action)}\n`);
     } else {
