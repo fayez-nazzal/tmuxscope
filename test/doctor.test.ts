@@ -86,3 +86,51 @@ test("repair renames the session that already holds a scope instead of creating 
   const movedIds = actions.filter((action) => action.kind === "move-window").map((action) => action.windowId);
   expect(new Set(movedIds).size).toBe(movedIds.length);
 });
+
+function seeded(seed: number): () => number {
+  let state = seed;
+  return () => {
+    state = state + 0x6d2b79f5;
+    let value = Math.imul(state ^ (state >>> 15), 1 | state);
+    value = value + Math.imul(value ^ (value >>> 7), 61 | value);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function shuffled<T>(items: T[], random: () => number): T[] {
+  const copy = items.slice();
+  for (let index = copy.length - 1; index > 0; index--) {
+    const swap = Math.floor(random() * (index + 1));
+    const temp = copy[index]!;
+    copy[index] = copy[swap]!;
+    copy[swap] = temp;
+  }
+  return copy;
+}
+
+const PERMUTATION_STATE: TmuxState = {
+  sessions: [
+    { id: "$0", name: "db", windows: 3, attached: false },
+    { id: "$1", name: "api2", windows: 1, attached: true },
+    { id: "$2", name: "misc", windows: 1, attached: false },
+  ],
+  windows: [
+    { id: "@0", index: 1, session: "db", path: "/w/api-service" },
+    { id: "@1", index: 2, session: "db", path: "/w/api-service.tasks-1" },
+    { id: "@2", index: 3, session: "db", path: "/w/db-service" },
+    { id: "@3", index: 1, session: "api2", path: "/w/api-service.tasks-2" },
+    { id: "@4", index: 1, session: "misc", path: "/home/me" },
+  ],
+};
+
+test("doctorReport is permutation invariant across a shuffled sessions and windows order", () => {
+  const random = seeded(20260814);
+  const baseline = doctorReport(PERMUTATION_STATE, SCOPES);
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const shuffledState: TmuxState = {
+      sessions: shuffled(PERMUTATION_STATE.sessions, random),
+      windows: shuffled(PERMUTATION_STATE.windows, random),
+    };
+    expect(doctorReport(shuffledState, SCOPES)).toEqual(baseline);
+  }
+});

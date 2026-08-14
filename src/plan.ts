@@ -155,10 +155,29 @@ function scopeOfSession(state: TmuxState, scopes: Scope[], session: string): str
   return majorityScope(windows.map((window) => window.path), scopes);
 }
 
+function ascendingName(left: string, right: string): number {
+  let order = 0;
+  if (left < right) {
+    order = -1;
+  } else if (left > right) {
+    order = 1;
+  }
+  return order;
+}
+
+function ascendingWindow(left: { index: number; id: string }, right: { index: number; id: string }): number {
+  let order = left.index - right.index;
+  if (order === 0) {
+    order = ascendingName(left.id, right.id);
+  }
+  return order;
+}
+
 export function doctorReport(state: TmuxState, scopes: Scope[]): Report {
   const report: Report = { mixed: [], split: [], problems: 0 };
-  for (const session of state.sessions) {
-    const windows = state.windows.filter((window) => window.session === session.name);
+  const orderedSessions = state.sessions.slice().sort((left, right) => ascendingName(left.name, right.name));
+  for (const session of orderedSessions) {
+    const windows = state.windows.filter((window) => window.session === session.name).sort(ascendingWindow);
     const detailed = windows.map((window) => ({ index: window.index, path: window.path, scope: resolveScope(window.path, scopes).scope }));
     const distinct = new Set(detailed.map((window) => window.scope));
     if (distinct.size > 1) {
@@ -166,7 +185,7 @@ export function doctorReport(state: TmuxState, scopes: Scope[]): Report {
     }
   }
   const holders = new Map<string, string[]>();
-  for (const session of state.sessions) {
+  for (const session of orderedSessions) {
     const scope = scopeOfSession(state, scopes, session.name);
     const names = holders.get(scope);
     let group: string[] = [];
@@ -176,7 +195,9 @@ export function doctorReport(state: TmuxState, scopes: Scope[]): Report {
     group.push(session.name);
     holders.set(scope, group);
   }
-  for (const [scope, sessions] of holders) {
+  const scopeNames = [...holders.keys()].sort(ascendingName);
+  for (const scope of scopeNames) {
+    const sessions = holders.get(scope)!.slice().sort(ascendingName);
     if (sessions.length > 1) {
       report.split.push({ scope, sessions });
     }
