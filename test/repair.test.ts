@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { doctorReport, repairPlan } from "../src/plan.ts";
+import { doctorReport } from "../src/doctor.ts";
+import { repairPlan } from "../src/repair.ts";
 import type { Action, TmuxState } from "../src/tmux.ts";
 import type { Scope } from "../src/config.ts";
 

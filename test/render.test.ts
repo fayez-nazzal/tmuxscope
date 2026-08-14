@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
-import { listRows, renderList, renderDoctor } from "../src/render.ts";
-import { doctorReport } from "../src/plan.ts";
+import { renderList, renderDoctor } from "../src/render.ts";
+import { listRows } from "../src/ownership.ts";
+import { doctorReport } from "../src/doctor.ts";
 import type { TmuxState } from "../src/tmux.ts";
 import type { Scope } from "../src/config.ts";
 

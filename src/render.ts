@@ -1,36 +1,6 @@
-import { MISC } from "./config.ts";
-import type { Scope } from "./config.ts";
-import { sessionForScope } from "./plan.ts";
-import type { Report } from "./plan.ts";
-import type { Action, TmuxState } from "./tmux.ts";
-
-export type Row = { scope: string; session: string; windows: number; attached: boolean; patterns: string[] };
-
-export function listRows(state: TmuxState, scopes: Scope[]): Row[] {
-  const rows: Row[] = [];
-  const names = [...scopes.map((scope) => scope.name), MISC];
-  for (const name of names) {
-    const owner = sessionForScope(state, scopes, name);
-    const scope = scopes.find((entry) => entry.name === name);
-    let patterns: string[] = [];
-    if (scope) {
-      patterns = scope.patterns;
-    }
-    let session = "";
-    let windows = 0;
-    let attached = false;
-    if (owner) {
-      const info = state.sessions.find((entry) => entry.name === owner);
-      session = owner;
-      if (info) {
-        windows = info.windows;
-        attached = info.attached;
-      }
-    }
-    rows.push({ scope: name, session, windows, attached, patterns });
-  }
-  return rows;
-}
+import type { Row } from "./ownership.ts";
+import type { Report } from "./doctor.ts";
+import type { Action } from "./tmux.ts";
 
 function pad(text: string, width: number): string {
   return text.padEnd(width, " ");

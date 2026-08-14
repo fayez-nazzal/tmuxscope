@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { routePlan, sessionForScope } from "../src/plan.ts";
+import { routePlan } from "../src/route.ts";
+import { sessionForScope } from "../src/ownership.ts";
 import type { TmuxState } from "../src/tmux.ts";
 import type { Scope } from "../src/config.ts";
 

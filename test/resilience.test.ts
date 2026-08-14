@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { adoptPlan, sessionForScope } from "../src/plan.ts";
+import { adoptPlan } from "../src/adopt.ts";
+import { sessionForScope } from "../src/ownership.ts";
 import { matchScore } from "../src/match.ts";
 import { realpathSync } from "node:fs";
 import { applyAll } from "../src/tmux.ts";

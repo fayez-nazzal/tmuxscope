@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { adoptPlan } from "../src/plan.ts";
+import { adoptPlan } from "../src/adopt.ts";
 import { FIELD } from "../src/tmux.ts";
 import type { TmuxState } from "../src/tmux.ts";
 import type { Scope } from "../src/config.ts";
