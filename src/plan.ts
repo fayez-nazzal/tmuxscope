@@ -1,6 +1,6 @@
 import { MISC } from "./config.ts";
 import type { Scope } from "./config.ts";
-import { resolveScope } from "./match.ts";
+import { canonical, resolveScope } from "./match.ts";
 import type { Action, SessionInfo, TmuxState } from "./tmux.ts";
 
 export type RouteInput = {
@@ -26,7 +26,11 @@ export function sessionForScope(state: TmuxState, scopes: Scope[], scope: string
     found = named.name;
   }
   if (!found) {
-    const holder = state.windows.find((window) => resolveScope(window.path, scopes).scope === scope);
+    const holder = state.windows.find((window) => {
+      const owns = resolveScope(window.path, scopes).scope === scope;
+      const settled = scopeOfSession(state, scopes, window.session) === scope;
+      return owns && settled;
+    });
     if (holder) {
       found = holder.session;
     }
@@ -77,12 +81,11 @@ export function adoptPlan(input: AdoptInput): AdoptPlan {
     const sessions = input.state.sessions.filter((session) => session.id !== input.sessionId);
     const windows = input.state.windows.filter((window) => window.session !== input.sessionName);
     const owner = sessionForScope({ sessions, windows }, input.scopes, scope);
-    if (owner) {
+    if (owner && input.attached) {
+      plan.message = `${owner} already owns ${scope}, leaving ${input.sessionName} attached`;
+    } else if (owner) {
       for (const window of input.windows) {
         plan.actions.push({ kind: "move-window", windowId: window.id, session: owner });
-      }
-      if (input.attached) {
-        plan.actions.push({ kind: "switch", target: owner });
       }
       plan.message = `merged into ${owner}`;
     } else {
@@ -93,6 +96,16 @@ export function adoptPlan(input: AdoptInput): AdoptPlan {
   return plan;
 }
 
+function idleWindow(state: TmuxState, session: string, target: string): string | null {
+  let found: string | null = null;
+  const wanted = canonical(target);
+  const match = state.windows.find((window) => window.session === session && canonical(window.path) === wanted);
+  if (match) {
+    found = match.id;
+  }
+  return found;
+}
+
 export function routePlan(input: RouteInput): RoutePlan {
   const plan: RoutePlan = { actions: [], origin: "none", cdPath: "", message: "" };
   const target = resolveScope(input.target, input.scopes).scope;
@@ -100,9 +113,16 @@ export function routePlan(input: RouteInput): RoutePlan {
   if (target !== current) {
     const existing = sessionForScope(input.state, input.scopes, target);
     let session = target;
+    let reused = false;
     if (existing) {
       session = existing;
-      plan.actions.push({ kind: "new-window", session, cwd: input.target });
+      const idle = idleWindow(input.state, session, input.target);
+      if (idle) {
+        reused = true;
+        plan.actions.push({ kind: "select-window", windowId: idle });
+      } else {
+        plan.actions.push({ kind: "new-window", session, cwd: input.target });
+      }
     } else {
       plan.actions.push({ kind: "new-session", name: session, cwd: input.target });
     }
@@ -118,6 +138,9 @@ export function routePlan(input: RouteInput): RoutePlan {
     }
     if (!existing) {
       plan.message = plan.message.replace("new window", "session created");
+    }
+    if (reused) {
+      plan.message = plan.message.replace("new window", "window reused");
     }
   }
   return plan;

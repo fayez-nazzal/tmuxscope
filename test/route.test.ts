@@ -43,10 +43,19 @@ test("staying inside the current scope does nothing", () => {
   expect(plan.origin).toBe("none");
 });
 
-test("an existing scope session gets a new window and the client switches", () => {
+test("an idle window already sitting in the target directory is reused instead of piling up another", () => {
   const plan = routePlan(input());
   expect(plan.actions).toEqual([
-    { kind: "new-window", session: "web", cwd: "/w/webapp" },
+    { kind: "select-window", windowId: "@2" },
+    { kind: "switch", target: "web" },
+  ]);
+  expect(plan.message).toBe("→ web  window reused, origin pane restored");
+});
+
+test("an existing scope session gets a new window and the client switches", () => {
+  const plan = routePlan(input({ target: "/w/webapp/app" }));
+  expect(plan.actions).toEqual([
+    { kind: "new-window", session: "web", cwd: "/w/webapp/app" },
     { kind: "switch", target: "web" },
   ]);
   expect(plan.message).toBe("→ web  new window, origin pane restored");
@@ -64,7 +73,7 @@ test("a pane that only ever ran cd is closed instead of restored", () => {
   const plan = routePlan(input({ paneWork: 0 }));
   expect(plan.origin).toBe("close");
   expect(plan.cdPath).toBe("");
-  expect(plan.message).toBe("→ web  new window, empty origin pane closed");
+  expect(plan.message).toBe("→ web  window reused, empty origin pane closed");
 });
 
 test("the last pane of a session is always restored, never closed", () => {

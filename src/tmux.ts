@@ -12,7 +12,8 @@ export type Action =
   | { kind: "new-window"; session: string; cwd: string }
   | { kind: "switch"; target: string }
   | { kind: "move-window"; windowId: string; session: string }
-  | { kind: "rename-session"; id: string; name: string };
+  | { kind: "rename-session"; id: string; name: string }
+  | { kind: "select-window"; windowId: string };
 
 export interface Tmux {
   state(): TmuxState;
@@ -81,6 +82,9 @@ export function commandFor(action: Action): string[] {
   if (action.kind === "rename-session") {
     command = ["rename-session", "-t", action.id, action.name];
   }
+  if (action.kind === "select-window") {
+    command = ["select-window", "-t", action.windowId];
+  }
   if (command.length === 0) {
     throw new Error(`Unhandled action kind`);
   }
@@ -129,3 +133,27 @@ export const tmux: Tmux = {
     run(["display-message", text]);
   },
 };
+
+function isCosmetic(action: Action): boolean {
+  return action.kind === "switch" || action.kind === "select-window";
+}
+
+export function applyAll(client: Tmux, actions: Action[]): string {
+  let failure = "";
+  for (const action of actions) {
+    if (failure === "") {
+      try {
+        client.apply(action);
+      } catch (error) {
+        let detail = String(error);
+        if (error instanceof Error) {
+          detail = error.message;
+        }
+        if (!isCosmetic(action)) {
+          failure = detail;
+        }
+      }
+    }
+  }
+  return failure;
+}

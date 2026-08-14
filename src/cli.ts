@@ -10,8 +10,8 @@ import type { AdoptWindow, RouteInput } from "./plan.ts";
 import { listRows, renderAction, renderDoctor, renderList } from "./render.ts";
 import { goTarget } from "./target.ts";
 import type { GoTarget, PathProbe } from "./target.ts";
-import { tmux } from "./tmux.ts";
-import type { TmuxState } from "./tmux.ts";
+import { applyAll, tmux } from "./tmux.ts";
+import type { Action, TmuxState } from "./tmux.ts";
 import { TMUX_HOOK, ZSH_HOOK } from "./hooks.ts";
 
 export const VERSION = "0.1.0";
@@ -88,11 +88,12 @@ function cmdRoute(path: string, scopes: Scope[]) {
   const panesInSession = tmux.panesInSession(context.session);
   const routeInput: RouteInput = { target: path, originPath, paneWork, panesInSession, scopes, state: routeState };
   const plan = routePlan(routeInput);
-  for (const action of plan.actions) {
-    tmux.apply(action);
-  }
   if (plan.origin === "restore" && process.env.TMUXSCOPE_CD_FILE) {
     writeFileSync(process.env.TMUXSCOPE_CD_FILE, plan.cdPath);
+  }
+  const failure = applyAll(tmux, plan.actions);
+  if (failure !== "") {
+    throw new Error(failure);
   }
   if (plan.origin === "close" && process.env.TMUXSCOPE_EXEC_FILE) {
     writeFileSync(process.env.TMUXSCOPE_EXEC_FILE, `tmux kill-pane -t '${paneId}'\n`);
@@ -110,8 +111,9 @@ function cmdAdopt(sessionId: string, scopes: Scope[]) {
     const windows: AdoptWindow[] = owned.map((entry) => ({ id: entry.id, path: entry.path }));
     if (windows.length > 0) {
       const plan = adoptPlan({ sessionId, sessionName: session.name, windows, scopes, state, attached: session.attached });
-      for (const action of plan.actions) {
-        tmux.apply(action);
+      const failure = applyAll(tmux, plan.actions);
+      if (failure !== "") {
+        throw new Error(failure);
       }
       if (plan.message) {
         tmux.message(plan.message);
@@ -185,13 +187,16 @@ function cmdGo(nameOrPath: string, scopes: Scope[]) {
   const state = tmux.state();
   const owner = sessionForScope(state, scopes, target.scope);
   if (owner) {
-    tmux.apply({ kind: "switch", target: owner });
+    applyAll(tmux, [{ kind: "switch", target: owner }]);
     process.stdout.write(`switched to ${owner}\n`);
   } else if (target.missing) {
     fail(missingDirectory(target, scopes, probe), 2);
   } else {
-    tmux.apply({ kind: "new-session", name: target.scope, cwd: target.cwd });
-    tmux.apply({ kind: "switch", target: target.scope });
+    const actions: Action[] = [{ kind: "new-session", name: target.scope, cwd: target.cwd }, { kind: "switch", target: target.scope }];
+    const failure = applyAll(tmux, actions);
+    if (failure !== "") {
+      throw new Error(failure);
+    }
     process.stdout.write(`created ${target.scope} at ${target.cwd}\n`);
   }
 }

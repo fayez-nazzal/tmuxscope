@@ -68,13 +68,10 @@ test("the windows of the new session itself never make it look like the scope al
   expect(plan.actions).toEqual([{ kind: "rename-session", id: "$9", name: "tools" }]);
 });
 
-test("an attached session in a taken scope is merged into the owner and switches focus", () => {
+test("an attached session in a taken scope is left alone so the seat of the user survives", () => {
   const plan = adoptPlan({ sessionId: "$9", sessionName: "web2", windows: [{ id: "@9", path: "/w/webapp/app" }], scopes: SCOPES, state: STATE, attached: true });
-  expect(plan.actions).toEqual([
-    { kind: "move-window", windowId: "@9", session: "web" },
-    { kind: "switch", target: "web" },
-  ]);
-  expect(plan.message).toBe("merged into web");
+  expect(plan.actions).toEqual([]);
+  expect(plan.message).toBe("web already owns web, leaving web2 attached");
 });
 
 test("a detached session in a taken scope is merged into the owner without switching focus", () => {

@@ -111,5 +111,8 @@ export function renderAction(action: Action): string {
   if (action.kind === "rename-session") {
     text = `rename-session ${action.id} to ${action.name}`;
   }
+  if (action.kind === "select-window") {
+    text = `select-window ${action.windowId}`;
+  }
   return text;
 }

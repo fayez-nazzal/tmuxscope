@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { MISC } from "./config.ts";
 import type { Scope } from "./config.ts";
@@ -21,15 +22,44 @@ export function normalizePattern(pattern: string): string {
   return expandTilde(pattern).replace(/\/+$/, "");
 }
 
+const CANONICAL_CACHE = new Map<string, string>();
+
+export function canonical(path: string): string {
+  let resolved = CANONICAL_CACHE.get(path);
+  if (resolved === undefined) {
+    resolved = path;
+    try {
+      resolved = realpathSync(path);
+    } catch (error) {
+      resolved = path;
+    }
+    CANONICAL_CACHE.set(path, resolved);
+  }
+  return resolved;
+}
+
+function canonicalPattern(pattern: string): string {
+  const expanded = normalizePattern(pattern);
+  const star = expanded.indexOf("*");
+  let resolved = canonical(expanded);
+  if (star !== -1) {
+    const cut = expanded.lastIndexOf("/", star);
+    resolved = `${canonical(expanded.slice(0, cut))}${expanded.slice(cut)}`;
+  }
+  return resolved;
+}
+
 function patternRegExp(pattern: string): RegExp {
-  const escaped = normalizePattern(pattern).replace(/[.+^${}()|[\]\\]/g, "\\$&");
+  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&");
   const globbed = escaped.replace(/\*/g, "[^/]*");
   return new RegExp(`^${globbed}(/.*)?$`);
 }
 
 export function matchScore(pattern: string, path: string): number {
   let score = -1;
-  if (patternRegExp(pattern).test(path)) {
+  const plain = patternRegExp(normalizePattern(pattern));
+  const resolved = patternRegExp(canonicalPattern(pattern));
+  if (plain.test(path) || resolved.test(canonical(path))) {
     score = normalizePattern(pattern).length;
   }
   return score;
