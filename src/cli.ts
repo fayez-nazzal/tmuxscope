@@ -11,7 +11,7 @@ import { listRows, renderAction, renderDoctor, renderList } from "./render.ts";
 import { goTarget } from "./target.ts";
 import type { GoTarget, PathProbe } from "./target.ts";
 import { applyAll, tmux } from "./tmux.ts";
-import type { Action, TmuxState } from "./tmux.ts";
+import type { Action, Tmux, TmuxState } from "./tmux.ts";
 import { TMUX_HOOK, ZSH_HOOK } from "./hooks.ts";
 
 export const VERSION = "0.1.0";
@@ -37,6 +37,15 @@ CONFIG
   Override with TMUXSCOPE_CONFIG.
 `;
 
+export type RouteEnvironment = {
+  insideTmux: boolean;
+  paneId: string;
+  originPath: string;
+  cdFile: string;
+  execFile: string;
+  write: (path: string, data: string) => void;
+};
+
 function configPath(): string {
   let path = DEFAULT_CONFIG_PATH;
   const override = process.env.TMUXSCOPE_CONFIG;
@@ -51,10 +60,10 @@ function fail(message: string, code: number): never {
   process.exit(code);
 }
 
-function cmdResolve(path: string, scopes: Scope[], json: boolean) {
+export function cmdResolve(client: Tmux, path: string, scopes: Scope[], json: boolean) {
   const resolution = resolveScope(path, scopes);
   if (json) {
-    const session = sessionForScope(tmux.state(), scopes, resolution.scope);
+    const session = sessionForScope(client.state(), scopes, resolution.scope);
     process.stdout.write(`${JSON.stringify({ ...resolution, path, session }, null, 2)}\n`);
   } else {
     process.stdout.write(`${resolution.scope}\n`);
@@ -71,71 +80,69 @@ function cmdGlobs(path: string, scopes: Scope[]) {
   process.stdout.write(`${zshGlobs(resolution.scope, scopes).join(" ")}\n`);
 }
 
-function cmdRoute(path: string, scopes: Scope[]) {
-  if (!process.env.TMUX) {
+export function cmdRoute(client: Tmux, path: string, scopes: Scope[], env: RouteEnvironment) {
+  if (!env.insideTmux) {
     fail("route only runs inside tmux", 3);
   }
-  const paneId = process.env.TMUX_PANE;
-  if (!paneId) {
+  if (!env.paneId) {
     fail("route needs TMUX_PANE, run it from a tmux pane", 3);
   }
-  const state = tmux.state();
-  const originPath = process.env.TMUXSCOPE_ORIGIN || process.cwd();
-  const context = tmux.paneContext(paneId);
+  const state = client.state();
+  const context = client.paneContext(env.paneId);
   const routeWindows = state.windows.filter((window) => window.id !== context.windowId);
   const routeState: TmuxState = { sessions: state.sessions, windows: routeWindows };
-  const paneWork = tmux.paneWork(paneId);
-  const panesInSession = tmux.panesInSession(context.session);
-  const routeInput: RouteInput = { target: path, originPath, paneWork, panesInSession, scopes, state: routeState };
+  const paneWork = client.paneWork(env.paneId);
+  const panesInSession = client.panesInSession(context.session);
+  const routeInput: RouteInput = { target: path, originPath: env.originPath, paneWork, panesInSession, scopes, state: routeState };
   const plan = routePlan(routeInput);
-  if (plan.origin === "restore" && process.env.TMUXSCOPE_CD_FILE) {
-    writeFileSync(process.env.TMUXSCOPE_CD_FILE, plan.cdPath);
+  if (plan.origin === "restore" && env.cdFile) {
+    env.write(env.cdFile, plan.cdPath);
   }
-  const failure = applyAll(tmux, plan.actions);
+  const failure = applyAll(client, plan.actions);
   if (failure !== "") {
     throw new Error(failure);
   }
-  if (plan.origin === "close" && process.env.TMUXSCOPE_EXEC_FILE) {
-    writeFileSync(process.env.TMUXSCOPE_EXEC_FILE, `tmux kill-pane -t '${paneId}'\n`);
+  if (plan.origin === "close" && env.execFile) {
+    env.write(env.execFile, `tmux kill-pane -t '${env.paneId}'\n`);
   }
   if (plan.message) {
     process.stdout.write(`${plan.message}\n`);
   }
 }
 
-function cmdAdopt(sessionId: string, scopes: Scope[]) {
-  const state = tmux.state();
+export function cmdAdopt(client: Tmux, sessionId: string, scopes: Scope[]) {
+  const state = client.state();
   const session = state.sessions.find((entry) => entry.id === sessionId);
   if (session) {
     const owned = state.windows.filter((entry) => entry.session === session.name);
     const windows: AdoptWindow[] = owned.map((entry) => ({ id: entry.id, path: entry.path }));
     if (windows.length > 0) {
       const plan = adoptPlan({ sessionId, sessionName: session.name, windows, scopes, state, attached: session.attached });
-      const failure = applyAll(tmux, plan.actions);
+      const failure = applyAll(client, plan.actions);
       if (failure !== "") {
         throw new Error(failure);
       }
       if (plan.message) {
-        tmux.message(plan.message);
+        client.message(plan.message);
       }
     }
   }
 }
 
-function cmdList(scopes: Scope[]) {
-  process.stdout.write(renderList(listRows(tmux.state(), scopes)));
+function cmdList(client: Tmux, scopes: Scope[]) {
+  process.stdout.write(renderList(listRows(client.state(), scopes)));
 }
 
-function cmdDoctor(scopes: Scope[]) {
-  const report = doctorReport(tmux.state(), scopes);
+function cmdDoctor(client: Tmux, scopes: Scope[]) {
+  const report = doctorReport(client.state(), scopes);
   process.stdout.write(renderDoctor(report));
   if (report.problems > 0) {
     process.exit(1);
   }
 }
 
-function cmdRepair(scopes: Scope[], dryRun: boolean) {
-  const state = tmux.state();
+function cmdRepair(client: Tmux, scopes: Scope[], dryRun: boolean) {
+  const state = client.state();
   const actions = repairPlan(doctorReport(state, scopes), state, scopes);
   if (actions.length === 0) {
     process.stdout.write("all clean\n");
@@ -144,7 +151,7 @@ function cmdRepair(scopes: Scope[], dryRun: boolean) {
     if (dryRun) {
       process.stdout.write(`would ${renderAction(action)}\n`);
     } else {
-      tmux.apply(action);
+      client.apply(action);
       process.stdout.write(`${renderAction(action)}\n`);
     }
   }
@@ -177,23 +184,23 @@ function missingDirectory(target: GoTarget, scopes: Scope[], probe: PathProbe): 
   return `scope ${target.scope} has no directory to start in, tried ${tried}`;
 }
 
-function cmdGo(nameOrPath: string, scopes: Scope[]) {
+function cmdGo(client: Tmux, nameOrPath: string, scopes: Scope[]) {
   const probe: PathProbe = { exists: existsSync, list: listDirectory, cwd: process.cwd(), home: homedir() };
   const target = goTarget(nameOrPath, scopes, probe);
   if (target.unknown) {
     const knownNames = [...scopes.map((entry) => entry.name), MISC];
     fail(`no scope named ${nameOrPath}\nknown scopes: ${knownNames.join(" ")}`, 2);
   }
-  const state = tmux.state();
+  const state = client.state();
   const owner = sessionForScope(state, scopes, target.scope);
   if (owner) {
-    applyAll(tmux, [{ kind: "switch", target: owner }]);
+    applyAll(client, [{ kind: "switch", target: owner }]);
     process.stdout.write(`switched to ${owner}\n`);
   } else if (target.missing) {
     fail(missingDirectory(target, scopes, probe), 2);
   } else {
     const actions: Action[] = [{ kind: "new-session", name: target.scope, cwd: target.cwd }, { kind: "switch", target: target.scope }];
-    const failure = applyAll(tmux, actions);
+    const failure = applyAll(client, actions);
     if (failure !== "") {
       throw new Error(failure);
     }
@@ -201,26 +208,37 @@ function cmdGo(nameOrPath: string, scopes: Scope[]) {
   }
 }
 
-function dispatch(command: string, positionals: string[], flags: string[], scopes: Scope[]) {
+function routeEnvironment(): RouteEnvironment {
+  return {
+    insideTmux: Boolean(process.env.TMUX),
+    paneId: process.env.TMUX_PANE || "",
+    originPath: process.env.TMUXSCOPE_ORIGIN || process.cwd(),
+    cdFile: process.env.TMUXSCOPE_CD_FILE || "",
+    execFile: process.env.TMUXSCOPE_EXEC_FILE || "",
+    write: writeFileSync,
+  };
+}
+
+function dispatch(client: Tmux, command: string, positionals: string[], flags: string[], scopes: Scope[]) {
   const path = positionals[1] || process.cwd();
   if (command === "resolve") {
-    cmdResolve(path, scopes, flags.includes("--json"));
+    cmdResolve(client, path, scopes, flags.includes("--json"));
   } else if (command === "rules") {
     cmdRules(path, scopes);
   } else if (command === "globs") {
     cmdGlobs(path, scopes);
   } else if (command === "route") {
-    cmdRoute(path, scopes);
+    cmdRoute(client, path, scopes, routeEnvironment());
   } else if (command === "adopt") {
-    cmdAdopt(positionals[1] || "", scopes);
+    cmdAdopt(client, positionals[1] || "", scopes);
   } else if (command === "list") {
-    cmdList(scopes);
+    cmdList(client, scopes);
   } else if (command === "doctor") {
-    cmdDoctor(scopes);
+    cmdDoctor(client, scopes);
   } else if (command === "repair") {
-    cmdRepair(scopes, flags.includes("--dry-run"));
+    cmdRepair(client, scopes, flags.includes("--dry-run"));
   } else if (command === "go") {
-    cmdGo(positionals[1] || "", scopes);
+    cmdGo(client, positionals[1] || "", scopes);
   } else {
     fail(`unknown command ${command}, try --help`, 2);
   }
@@ -256,7 +274,7 @@ function main() {
     throw error;
   }
   try {
-    dispatch(command, positionals, flags, scopes);
+    dispatch(tmux, command, positionals, flags, scopes);
   } catch (error) {
     let detail = String(error);
     if (error instanceof Error) {
