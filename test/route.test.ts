@@ -105,3 +105,17 @@ test("excluding the origin window before planning avoids that misattribution", (
     { kind: "switch", target: "web" },
   ]);
 });
+
+test("a session left window-less by excluding the origin window is never mistaken for the misc owner", () => {
+  const soleSession: TmuxState = {
+    sessions: [{ id: "$0", name: "seed", windows: 1, attached: true }],
+    windows: [{ id: "@0", index: 1, session: "seed", path: "/w/api-service" }],
+  };
+  const routeState: TmuxState = { sessions: soleSession.sessions, windows: [] };
+  expect(sessionForScope(routeState, SCOPES, "misc")).toBe(null);
+  const plan = routePlan(input({ target: "/w/elsewhere", originPath: "/w/api-service", state: routeState, panesInSession: 1 }));
+  expect(plan.actions).toEqual([
+    { kind: "new-session", name: "misc", cwd: "/w/elsewhere" },
+    { kind: "switch", target: "misc" },
+  ]);
+});

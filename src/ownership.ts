@@ -36,7 +36,10 @@ export function sessionForScope(state: TmuxState, scopes: Scope[], scope: string
   if (named) {
     found = named.name;
   } else {
-    const holders = state.sessions.filter((session) => majorityForSession(state, scopes, session.name).scope === scope);
+    const holders = state.sessions.filter((session) => {
+      const hasWindows = state.windows.some((window) => window.session === session.name);
+      return hasWindows && majorityForSession(state, scopes, session.name).scope === scope;
+    });
     if (holders.length > 0) {
       const ranked = holders.slice().sort((left, right) => sessionOwnerOrder(state, scopes, scope, left, right));
       found = ranked[0]!.name;
