@@ -1,6 +1,6 @@
 {
   "name": "tmuxscope",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "One tmux session per project scope, one scope per session.",
   "type": "module",
   "bin": {

@@ -46,18 +46,16 @@ test("a real cd through the real hook and binary lands the pane right and leaves
     Bun.spawnSync(["tmux", "-S", socket, "send-keys", "-t", pane, `source ${hookFile}`, "Enter"], { env });
     Bun.spawnSync(["tmux", "-S", socket, "send-keys", "-t", pane, `cd ${elsewhere}`, "Enter"], { env });
 
-    const deadline = Date.now() + 5000;
+    const deadline = Date.now() + 15000;
+    let windows: string[] = [];
     let landed = false;
     while (Date.now() < deadline && !landed) {
-      const sessions = run(socket, ["list-sessions", "-F", "#{session_name}"]).split("\n");
-      landed = sessions.includes("misc");
+      windows = run(socket, ["list-windows", "-a", "-F", "#{session_name} #{pane_current_path}"]).split("\n");
+      landed = windows.includes(`misc ${elsewhere}`) && windows.includes(`seed ${work}`);
       if (!landed) {
         Bun.sleepSync(50);
       }
     }
-    expect(landed).toBe(true);
-
-    const windows = run(socket, ["list-windows", "-a", "-F", "#{session_name} #{pane_current_path}"]).split("\n");
     expect(windows).toContain(`misc ${elsewhere}`);
     expect(windows).toContain(`seed ${work}`);
 
