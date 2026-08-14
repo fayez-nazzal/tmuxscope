@@ -141,7 +141,17 @@ function cmdDoctor(client: Tmux, scopes: Scope[]) {
   }
 }
 
-function cmdRepair(client: Tmux, scopes: Scope[], dryRun: boolean) {
+function loggingClient(client: Tmux): Tmux {
+  return {
+    ...client,
+    apply(action: Action) {
+      client.apply(action);
+      process.stdout.write(`${renderAction(action)}\n`);
+    },
+  };
+}
+
+export function cmdRepair(client: Tmux, scopes: Scope[], dryRun: boolean) {
   const state = client.state();
   const plan = repairPlan(doctorReport(state, scopes), state, scopes);
   if (plan.unsatisfiable.length > 0) {
@@ -154,12 +164,20 @@ function cmdRepair(client: Tmux, scopes: Scope[], dryRun: boolean) {
   if (plan.actions.length === 0) {
     process.stdout.write("all clean\n");
   }
-  for (const action of plan.actions) {
-    if (dryRun) {
+  if (dryRun) {
+    for (const action of plan.actions) {
       process.stdout.write(`would ${renderAction(action)}\n`);
-    } else {
-      client.apply(action);
-      process.stdout.write(`${renderAction(action)}\n`);
+    }
+  } else {
+    const failure = applyAll(loggingClient(client), plan.actions);
+    if (failure !== "") {
+      process.stderr.write(`tmuxscope repair: ${failure}\n`);
+      process.exit(4);
+    }
+    const after = doctorReport(client.state(), scopes);
+    if (after.problems > 0) {
+      process.stdout.write(renderDoctor(after));
+      process.exit(1);
     }
   }
 }
