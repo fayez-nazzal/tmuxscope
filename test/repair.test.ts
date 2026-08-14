@@ -163,13 +163,15 @@ test("the simulator refuses a move into a session an earlier move destroyed", ()
 test("repair fills a contested loser session before it drains it", () => {
   const report = doctorReport(CONTESTED_LOSER, SCOPES);
   expect(report.problems).toBeGreaterThan(0);
+  expect(report.ambiguous).toEqual([{ session: "api", candidates: ["api", "web"], count: 1, rule: "session name matches scope name" }]);
   const actions = repairPlan(report, CONTESTED_LOSER, SCOPES);
   expect(actions).toEqual([
-    { kind: "move-window", windowId: "@2", session: "web" },
-    { kind: "move-window", windowId: "@0", session: "api" },
+    { kind: "new-session", name: "web-2", cwd: "/w/webapp" },
+    { kind: "move-window", windowId: "@1", session: "web" },
+    { kind: "move-window", windowId: "@2", session: "web-2" },
   ]);
   const after = repair(CONTESTED_LOSER);
-  expect(after.sessions.map((session) => session.name).sort()).toEqual(["api", "web"]);
+  expect(after.sessions.map((session) => session.name).sort()).toEqual(["web", "web-2"]);
   expect(doctorReport(after, SCOPES).problems).toBe(0);
 });
 
@@ -219,9 +221,9 @@ test("repair never plans a session name that already exists", () => {
   expect(before.problems).toBeGreaterThan(0);
   const actions = repairPlan(before, NAME_COLLISION, SCOPES);
   expect(actions).toEqual([
-    { kind: "rename-session", id: "$0", name: "web" },
-    { kind: "new-session", name: "api", cwd: "/w/api-service" },
-    { kind: "move-window", windowId: "@2", session: "api" },
+    { kind: "new-session", name: "web", cwd: "/w/webapp" },
+    { kind: "move-window", windowId: "@0", session: "web" },
+    { kind: "move-window", windowId: "@1", session: "web" },
   ]);
   const after = repair(NAME_COLLISION);
   expect(doctorReport(after, SCOPES).problems).toBe(0);

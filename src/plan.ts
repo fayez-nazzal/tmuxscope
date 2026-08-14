@@ -1,6 +1,6 @@
 import { MISC } from "./config.ts";
 import type { Scope } from "./config.ts";
-import { canonical, resolveScope } from "./match.ts";
+import { canonical, normalizePattern, resolveScope } from "./match.ts";
 import type { Action, SessionInfo, TmuxState } from "./tmux.ts";
 
 export type RouteInput = {
@@ -19,45 +19,107 @@ export type RoutePlan = {
   message: string;
 };
 
+function windowsOfScope(state: TmuxState, scopes: Scope[], scope: string, session: string): number {
+  return state.windows.filter((window) => window.session === session && resolveScope(window.path, scopes).scope === scope).length;
+}
+
+function sessionOwnerOrder(state: TmuxState, scopes: Scope[], scope: string, left: SessionInfo, right: SessionInfo): number {
+  let order = windowsOfScope(state, scopes, scope, right.name) - windowsOfScope(state, scopes, scope, left.name);
+  if (order === 0) {
+    const leftAttached = left.attached ? 1 : 0;
+    const rightAttached = right.attached ? 1 : 0;
+    order = rightAttached - leftAttached;
+  }
+  if (order === 0) {
+    order = ascendingName(left.name, right.name);
+  }
+  return order;
+}
+
 export function sessionForScope(state: TmuxState, scopes: Scope[], scope: string): string | null {
   let found: string | null = null;
   const named = state.sessions.find((session) => session.name === scope);
   if (named) {
     found = named.name;
-  }
-  if (!found) {
-    const holder = state.windows.find((window) => {
-      const owns = resolveScope(window.path, scopes).scope === scope;
-      const settled = scopeOfSession(state, scopes, window.session) === scope;
-      return owns && settled;
-    });
-    if (holder) {
-      found = holder.session;
+  } else {
+    const holders = state.sessions.filter((session) => majorityForSession(state, scopes, session.name).scope === scope);
+    if (holders.length > 0) {
+      const ranked = holders.slice().sort((left, right) => sessionOwnerOrder(state, scopes, scope, left, right));
+      found = ranked[0]!.name;
     }
   }
   return found;
 }
 
-export function majorityScope(paths: string[], scopes: Scope[]): string {
+export type MajorityResult = { scope: string; tiedWith: string[]; rule: string; count: number };
+
+function longestPatternWinner(candidates: string[], maxLength: Map<string, number>): { scope: string; rule: string } {
+  const sorted = candidates.slice().sort(ascendingName);
+  let winner = sorted[0]!;
+  let best = maxLength.get(winner) || 0;
+  for (const scope of sorted) {
+    const length = maxLength.get(scope) || 0;
+    if (length > best) {
+      best = length;
+      winner = scope;
+    }
+  }
+  const distinctLengths = new Set(sorted.map((scope) => maxLength.get(scope) || 0));
+  let rule = "longest matched pattern";
+  if (distinctLengths.size <= 1) {
+    rule = "lowest scope name";
+  }
+  return { scope: winner, rule };
+}
+
+export function majorityScope(paths: string[], scopes: Scope[], sessionName: string): MajorityResult {
   const counts = new Map<string, number>();
+  const maxLength = new Map<string, number>();
   for (const path of paths) {
-    const scope = resolveScope(path, scopes).scope;
+    const resolution = resolveScope(path, scopes);
+    const scope = resolution.scope;
     const current = counts.get(scope);
     let count = 1;
     if (current) {
       count = current + 1;
     }
     counts.set(scope, count);
-  }
-  let winner = MISC;
-  let best = 0;
-  for (const [scope, count] of counts) {
-    if (count > best) {
-      best = count;
-      winner = scope;
+    let length = 0;
+    if (resolution.matched) {
+      length = normalizePattern(resolution.matched).length;
+    }
+    const previousLength = maxLength.get(scope);
+    if (previousLength === undefined || length > previousLength) {
+      maxLength.set(scope, length);
     }
   }
-  return winner;
+  let result: MajorityResult = { scope: MISC, tiedWith: [], rule: "", count: 0 };
+  if (counts.size > 0) {
+    let best = 0;
+    for (const count of counts.values()) {
+      if (count > best) {
+        best = count;
+      }
+    }
+    const candidates = [...counts.keys()].filter((scope) => counts.get(scope) === best);
+    let winner = candidates[0]!;
+    let tiedWith: string[] = [];
+    let rule = "";
+    if (candidates.length > 1) {
+      tiedWith = candidates.slice().sort(ascendingName);
+      const named = candidates.find((scope) => scope === sessionName);
+      if (named) {
+        winner = named;
+        rule = "session name matches scope name";
+      } else {
+        const resolved = longestPatternWinner(candidates, maxLength);
+        winner = resolved.scope;
+        rule = resolved.rule;
+      }
+    }
+    result = { scope: winner, tiedWith, rule, count: best };
+  }
+  return result;
 }
 
 export type AdoptWindow = { id: string; path: string };
@@ -76,7 +138,7 @@ export type AdoptPlan = { actions: Action[]; message: string };
 export function adoptPlan(input: AdoptInput): AdoptPlan {
   const plan: AdoptPlan = { actions: [], message: "" };
   const paths = input.windows.map((window) => window.path);
-  const scope = majorityScope(paths, input.scopes);
+  const scope = majorityScope(paths, input.scopes, input.sessionName).scope;
   if (input.sessionName !== scope) {
     const sessions = input.state.sessions.filter((session) => session.id !== input.sessionId);
     const windows = input.state.windows.filter((window) => window.session !== input.sessionName);
@@ -148,11 +210,12 @@ export function routePlan(input: RouteInput): RoutePlan {
 
 export type Mixed = { session: string; windows: { index: number; path: string; scope: string }[] };
 export type Split = { scope: string; sessions: string[] };
-export type Report = { mixed: Mixed[]; split: Split[]; problems: number };
+export type Ambiguous = { session: string; candidates: string[]; count: number; rule: string };
+export type Report = { mixed: Mixed[]; split: Split[]; ambiguous: Ambiguous[]; problems: number };
 
-function scopeOfSession(state: TmuxState, scopes: Scope[], session: string): string {
+function majorityForSession(state: TmuxState, scopes: Scope[], session: string): MajorityResult {
   const windows = state.windows.filter((window) => window.session === session);
-  return majorityScope(windows.map((window) => window.path), scopes);
+  return majorityScope(windows.map((window) => window.path), scopes, session);
 }
 
 function ascendingName(left: string, right: string): number {
@@ -174,7 +237,7 @@ function ascendingWindow(left: { index: number; id: string }, right: { index: nu
 }
 
 export function doctorReport(state: TmuxState, scopes: Scope[]): Report {
-  const report: Report = { mixed: [], split: [], problems: 0 };
+  const report: Report = { mixed: [], split: [], ambiguous: [], problems: 0 };
   const orderedSessions = state.sessions.slice().sort((left, right) => ascendingName(left.name, right.name));
   for (const session of orderedSessions) {
     const windows = state.windows.filter((window) => window.session === session.name).sort(ascendingWindow);
@@ -186,7 +249,11 @@ export function doctorReport(state: TmuxState, scopes: Scope[]): Report {
   }
   const holders = new Map<string, string[]>();
   for (const session of orderedSessions) {
-    const scope = scopeOfSession(state, scopes, session.name);
+    const majority = majorityForSession(state, scopes, session.name);
+    if (majority.tiedWith.length > 0) {
+      report.ambiguous.push({ session: session.name, candidates: majority.tiedWith, count: majority.count, rule: majority.rule });
+    }
+    const scope = majority.scope;
     const names = holders.get(scope);
     let group: string[] = [];
     if (names) {
@@ -202,7 +269,7 @@ export function doctorReport(state: TmuxState, scopes: Scope[]): Report {
       report.split.push({ scope, sessions });
     }
   }
-  report.problems = report.mixed.length + report.split.length;
+  report.problems = report.mixed.length + report.split.length + report.ambiguous.length;
   return report;
 }
 
@@ -239,7 +306,8 @@ function majorityOwner(scope: string, state: TmuxState, scopes: Scope[], claimed
   let best = -1;
   for (const session of state.sessions) {
     const free = !claimed.has(session.id);
-    const holds = scopeOfSession(state, scopes, session.name) === scope;
+    const majority = majorityForSession(state, scopes, session.name);
+    const holds = majority.scope === scope && majority.tiedWith.length === 0;
     const rank = ownerRank(session, scope);
     if (free && holds && rank > best) {
       best = rank;
@@ -317,7 +385,9 @@ function orderedMoves(moves: Move[], counts: Map<string, number>): Ordering {
           rank = 1;
         }
       }
-      if (rank > bestRank) {
+      const better = rank > bestRank;
+      const tiedByRank = rank === bestRank && picked !== -1 && ascendingName(move.windowId, pending[picked]!.windowId) < 0;
+      if (better || tiedByRank) {
         bestRank = rank;
         picked = index;
       }
@@ -340,23 +410,26 @@ function orderedMoves(moves: Move[], counts: Map<string, number>): Ordering {
 function buildRepair(report: Report, state: TmuxState, scopes: Scope[], reuseDrained: boolean): Ordering {
   const reported = reportedNames(report);
   const strays = state.windows.filter((window) => reported.has(window.session));
+  const strayScopes = new Set<string>();
+  for (const window of strays) {
+    strayScopes.add(resolveScope(window.path, scopes).scope);
+  }
+  const orderedScopes = [...strayScopes].sort(ascendingName);
   const owners = new Map<string, SessionInfo>();
   const creations = new Map<string, string>();
   const claimed = new Set<string>();
-  for (const window of strays) {
-    const scope = resolveScope(window.path, scopes).scope;
-    const decided = owners.has(scope) || creations.has(scope);
-    if (!decided) {
-      let owner = majorityOwner(scope, state, scopes, claimed);
-      if (!owner && reuseDrained) {
-        owner = namedOwner(scope, state, reported, claimed);
-      }
-      if (owner) {
-        claimed.add(owner.id);
-        owners.set(scope, owner);
-      } else {
-        creations.set(scope, window.path);
-      }
+  for (const scope of orderedScopes) {
+    let owner = majorityOwner(scope, state, scopes, claimed);
+    if (!owner && reuseDrained) {
+      owner = namedOwner(scope, state, reported, claimed);
+    }
+    if (owner) {
+      claimed.add(owner.id);
+      owners.set(scope, owner);
+    } else {
+      const paths = strays.filter((window) => resolveScope(window.path, scopes).scope === scope).map((window) => window.path);
+      const lowestPath = paths.slice().sort(ascendingName)[0]!;
+      creations.set(scope, lowestPath);
     }
   }
   const actions: Action[] = [];

@@ -31,15 +31,16 @@ const SPLIT: TmuxState = {
 
 test("a clean state reports no problems", () => {
   const state: TmuxState = { sessions: [{ id: "$0", name: "web", windows: 1, attached: true }], windows: [{ id: "@0", index: 1, session: "web", path: "/w/webapp" }] };
-  expect(doctorReport(state, SCOPES)).toEqual({ mixed: [], split: [], problems: 0 });
+  expect(doctorReport(state, SCOPES)).toEqual({ mixed: [], split: [], ambiguous: [], problems: 0 });
 });
 
-test("a session holding two scopes is reported as mixed", () => {
+test("a session holding two scopes is reported as mixed, and an even split also reports as ambiguous", () => {
   const report = doctorReport(MIXED, SCOPES);
-  expect(report.problems).toBe(1);
+  expect(report.problems).toBe(2);
   expect(report.mixed).toEqual([
     { session: "db", windows: [{ index: 1, path: "/w/db-service", scope: "db" }, { index: 2, path: "/w/webapp", scope: "web" }] },
   ]);
+  expect(report.ambiguous).toEqual([{ session: "db", candidates: ["db", "web"], count: 1, rule: "session name matches scope name" }]);
 });
 
 test("a scope spread over two sessions is reported as split", () => {
@@ -133,4 +134,15 @@ test("doctorReport is permutation invariant across a shuffled sessions and windo
     };
     expect(doctorReport(shuffledState, SCOPES)).toEqual(baseline);
   }
+});
+
+test("swapping the window order of a two scope session leaves the verdict unchanged, and names both ambiguous candidates", () => {
+  const before = doctorReport(MIXED, SCOPES);
+  const swapped: TmuxState = {
+    sessions: MIXED.sessions,
+    windows: [MIXED.windows[1]!, MIXED.windows[0]!],
+  };
+  const after = doctorReport(swapped, SCOPES);
+  expect(after).toEqual(before);
+  expect(after.ambiguous).toEqual([{ session: "db", candidates: ["db", "web"], count: 1, rule: "session name matches scope name" }]);
 });

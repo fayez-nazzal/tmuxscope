@@ -88,6 +88,11 @@ export function renderDoctor(report: Report): string {
         lines.push(`  ${session}`);
       }
     }
+    for (const ambiguous of report.ambiguous) {
+      lines.push("");
+      lines.push(`ambiguous session ${ambiguous.session} splits evenly, ${ambiguous.count} windows each, between ${ambiguous.candidates.join(" and ")}`);
+      lines.push(`  tie broken by ${ambiguous.rule}`);
+    }
     lines.push("");
     lines.push("run tmuxscope repair to fix");
   }
