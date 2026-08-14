@@ -34,6 +34,31 @@ test("resolve --json reports the matched pattern", () => {
   expect(JSON.parse(result.out)).toMatchObject({ scope: "api", matched: "~/code/api-service*" });
 });
 
+test("resolve --json no longer carries a session key", () => {
+  const config = configFile("api = ~/code/api-service*\n");
+  const result = run(["resolve", `${HOME}/code/api-service`, "--json"], config);
+  expect(Object.keys(JSON.parse(result.out)).sort()).toEqual(["matched", "path", "scope"]);
+});
+
+test("resolve --json succeeds with tmux removed from PATH, the one pure question in the tool", () => {
+  const config = configFile("api = ~/code/api-service*\n");
+  const which = Bun.spawnSync(["which", "tmux"]);
+  const tmuxPath = which.stdout.toString().trim();
+  let strippedPath = process.env.PATH!;
+  if (tmuxPath) {
+    const { dirname } = require("node:path") as typeof import("node:path");
+    strippedPath = process.env
+      .PATH!.split(":")
+      .filter((entry) => entry !== dirname(tmuxPath))
+      .join(":");
+  }
+  const result = Bun.spawnSync([process.execPath, CLI, "resolve", `${HOME}/code/api-service`, "--json"], {
+    env: { ...process.env, TMUXSCOPE_CONFIG: config, PATH: strippedPath },
+  });
+  expect(result.exitCode).toBe(0);
+  expect(JSON.parse(result.stdout.toString().trim())).toMatchObject({ scope: "api" });
+});
+
 test("resolve --json with no path argument defaults to the current working directory", () => {
   const config = configFile("api = ~/code/api-service*\n");
   const result = run(["resolve", "--json"], config);

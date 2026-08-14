@@ -60,11 +60,10 @@ function fail(message: string, code: number): never {
   process.exit(code);
 }
 
-export function cmdResolve(client: Tmux, path: string, scopes: Scope[], json: boolean) {
+export function cmdResolve(path: string, scopes: Scope[], json: boolean) {
   const resolution = resolveScope(path, scopes);
   if (json) {
-    const session = sessionForScope(client.state(), scopes, resolution.scope);
-    process.stdout.write(`${JSON.stringify({ ...resolution, path, session }, null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify({ ...resolution, path }, null, 2)}\n`);
   } else {
     process.stdout.write(`${resolution.scope}\n`);
   }
@@ -247,7 +246,7 @@ function routeEnvironment(): RouteEnvironment {
 function dispatch(client: Tmux, command: string, positionals: string[], flags: string[], scopes: Scope[]) {
   const path = positionals[1] || process.cwd();
   if (command === "resolve") {
-    cmdResolve(client, path, scopes, flags.includes("--json"));
+    cmdResolve(path, scopes, flags.includes("--json"));
   } else if (command === "rules") {
     cmdRules(path, scopes);
   } else if (command === "globs") {
