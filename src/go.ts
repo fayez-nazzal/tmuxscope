@@ -1,7 +1,7 @@
 import { dirname, join } from "node:path";
-import { MISC } from "./config.ts";
-import type { Scope } from "./config.ts";
-import { expandTilde, matchScore, normalizePattern, resolveScope } from "./match.ts";
+import { MISC } from "./scopes.ts";
+import type { Scope } from "./scopes.ts";
+import { expandTilde, matchScore, normalizePattern, resolveScope } from "./resolve.ts";
 
 export type PathProbe = { exists: (path: string) => boolean; list: (path: string) => string[]; cwd: string; home: string };
 export type GoTarget = { scope: string; cwd: string; unknown: boolean; missing: boolean };

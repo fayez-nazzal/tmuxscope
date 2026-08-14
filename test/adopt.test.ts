@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { adoptPlan } from "../src/adopt.ts";
 import { FIELD } from "../src/tmux.ts";
 import type { TmuxState } from "../src/tmux.ts";
-import type { Scope } from "../src/config.ts";
+import type { Scope } from "../src/scopes.ts";
 
 const CLI = join(import.meta.dir, "..", "src", "cli.ts");
 

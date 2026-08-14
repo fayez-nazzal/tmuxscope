@@ -1,4 +1,4 @@
-import type { Scope } from "./config.ts";
+import type { Scope } from "./scopes.ts";
 import { majorityScope, sessionForScope } from "./ownership.ts";
 import type { Action, TmuxState } from "./tmux.ts";
 

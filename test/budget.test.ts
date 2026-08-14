@@ -1,9 +1,10 @@
 import { expect, test } from "bun:test";
 import { cmdRoute } from "../src/cli.ts";
 import type { RouteEnvironment } from "../src/cli.ts";
-import { resolveScope, zshRules } from "../src/match.ts";
+import { resolveScope } from "../src/resolve.ts";
+import { zshRules } from "../src/rules.ts";
 import type { Action, PaneContext, Tmux, TmuxState } from "../src/tmux.ts";
-import type { Scope } from "../src/config.ts";
+import type { Scope } from "../src/scopes.ts";
 
 const SCOPES: Scope[] = [
   { name: "api", patterns: ["/w/api-service*"] },

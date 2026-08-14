@@ -1,5 +1,5 @@
-import type { Scope } from "./config.ts";
-import { canonical, resolveScope } from "./match.ts";
+import type { Scope } from "./scopes.ts";
+import { canonical, resolveScope } from "./resolve.ts";
 import { sessionForScope } from "./ownership.ts";
 import type { Action, TmuxState } from "./tmux.ts";
 

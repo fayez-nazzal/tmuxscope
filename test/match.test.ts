@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
 import { homedir } from "node:os";
-import { expandTilde, matchScore, normalizePattern, resolveScope, zshRules } from "../src/match.ts";
-import type { Scope } from "../src/config.ts";
+import { expandTilde, matchScore, normalizePattern, resolveScope } from "../src/resolve.ts";
+import { zshRules } from "../src/rules.ts";
+import type { Scope } from "../src/scopes.ts";
 
 const HOME = homedir();
 

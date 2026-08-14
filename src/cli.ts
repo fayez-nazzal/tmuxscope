@@ -2,9 +2,10 @@
 
 import { existsSync, readdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { DEFAULT_CONFIG_PATH, loadConfig, ConfigError, MISC } from "./config.ts";
-import type { Scope } from "./config.ts";
-import { resolveScope, zshGlobs, zshRules } from "./match.ts";
+import { DEFAULT_CONFIG_PATH, loadConfig, ConfigError, MISC } from "./scopes.ts";
+import type { Scope } from "./scopes.ts";
+import { resolveScope } from "./resolve.ts";
+import { zshGlobs, zshRules } from "./rules.ts";
 import { adoptPlan } from "./adopt.ts";
 import type { AdoptWindow } from "./adopt.ts";
 import { doctorReport } from "./doctor.ts";
@@ -13,8 +14,8 @@ import { repairPlan } from "./repair.ts";
 import { routePlan } from "./route.ts";
 import type { RouteInput } from "./route.ts";
 import { renderAction, renderDoctor, renderList } from "./render.ts";
-import { goTarget } from "./target.ts";
-import type { GoTarget, PathProbe } from "./target.ts";
+import { goTarget } from "./go.ts";
+import type { GoTarget, PathProbe } from "./go.ts";
 import { applyAll, tmux } from "./tmux.ts";
 import type { Action, Tmux, TmuxState } from "./tmux.ts";
 import { TMUX_HOOK, ZSH_HOOK } from "./hooks.ts";

@@ -2,11 +2,11 @@ import { expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { goTarget, scopeDirectories } from "../src/target.ts";
-import { resolveScope } from "../src/match.ts";
-import { MISC } from "../src/config.ts";
-import type { Scope } from "../src/config.ts";
-import type { PathProbe } from "../src/target.ts";
+import { goTarget, scopeDirectories } from "../src/go.ts";
+import { resolveScope } from "../src/resolve.ts";
+import { MISC } from "../src/scopes.ts";
+import type { Scope } from "../src/scopes.ts";
+import type { PathProbe } from "../src/go.ts";
 
 function listDirectory(path: string): string[] {
   let entries: string[] = [];

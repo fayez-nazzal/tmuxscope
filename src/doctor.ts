@@ -1,5 +1,5 @@
-import type { Scope } from "./config.ts";
-import { resolveScope } from "./match.ts";
+import type { Scope } from "./scopes.ts";
+import { resolveScope } from "./resolve.ts";
 import { ascendingName, majorityForSession } from "./ownership.ts";
 import type { TmuxState } from "./tmux.ts";
 

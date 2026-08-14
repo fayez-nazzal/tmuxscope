@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { cmdRepair } from "../src/cli.ts";
 import type { Action, PaneContext, Tmux, TmuxState } from "../src/tmux.ts";
-import type { Scope } from "../src/config.ts";
+import type { Scope } from "../src/scopes.ts";
 
 const SCOPES: Scope[] = [
   { name: "db", patterns: ["/w/db-service"] },

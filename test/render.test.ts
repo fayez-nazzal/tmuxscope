@@ -3,7 +3,7 @@ import { renderList, renderDoctor } from "../src/render.ts";
 import { listRows } from "../src/ownership.ts";
 import { doctorReport } from "../src/doctor.ts";
 import type { TmuxState } from "../src/tmux.ts";
-import type { Scope } from "../src/config.ts";
+import type { Scope } from "../src/scopes.ts";
 
 const SCOPES: Scope[] = [
   { name: "web", patterns: ["/w/webapp"] },

@@ -1,6 +1,6 @@
-import { MISC } from "./config.ts";
-import type { Scope } from "./config.ts";
-import { normalizePattern, resolveScope } from "./match.ts";
+import { MISC } from "./scopes.ts";
+import type { Scope } from "./scopes.ts";
+import { normalizePattern, resolveScope } from "./resolve.ts";
 import type { SessionInfo, TmuxState } from "./tmux.ts";
 
 export function ascendingName(left: string, right: string): number {

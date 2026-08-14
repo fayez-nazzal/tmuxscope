@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { parseConfig, ConfigError } from "../src/config.ts";
+import { parseConfig, ConfigError } from "../src/scopes.ts";
 
 test("parseConfig reads each scope name and its patterns", () => {
   const text = "api = ~/code/api-service*\nweb = ~/webapp ~/repos/webapp\n";

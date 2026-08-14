@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
 import { adoptPlan } from "../src/adopt.ts";
 import { sessionForScope } from "../src/ownership.ts";
-import { matchScore } from "../src/match.ts";
+import { matchScore } from "../src/resolve.ts";
 import { realpathSync } from "node:fs";
 import { applyAll } from "../src/tmux.ts";
 import type { Action, PaneContext, Tmux, TmuxState } from "../src/tmux.ts";
-import type { Scope } from "../src/config.ts";
+import type { Scope } from "../src/scopes.ts";
 
 const SCOPES: Scope[] = [
   { name: "api", patterns: ["/w/api-service*"] },
