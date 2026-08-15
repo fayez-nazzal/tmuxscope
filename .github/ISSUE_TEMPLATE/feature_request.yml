@@ -1,0 +1,23 @@
+name: Feature request
+description: Suggest a change to tmuxscope
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem you are hitting
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: The outcome you want
+    validations:
+      required: true
+  - type: textarea
+    id: tried
+    attributes:
+      label: Anything you tried
+    validations:
+      required: false

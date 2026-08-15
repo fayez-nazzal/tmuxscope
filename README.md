@@ -1,11 +1,46 @@
 # tmuxscope
 
-One tmux session per project scope, and one scope per session.
+[![CI](https://github.com/fayez-nazzal/tmuxscope/actions/workflows/ci.yml/badge.svg)](https://github.com/fayez-nazzal/tmuxscope/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-It is built to be called by an AI coding agent as much as by a person. Every
-command an agent needs speaks JSON on `--json`, and every outcome has its own
-exit code, so a caller can branch without reading prose. See
-[AGENTS.md](AGENTS.md) for the recipes, the field contract and the traps.
+A tmux and shell setup tool for a person who works across many project
+directories. It keeps your tmux server tidy on its own, so you stop hunting for
+the window you left open.
+
+The whole idea is one rule.
+
+- One tmux session per scope.
+- One scope per directory.
+
+A **scope** is a name plus the paths it owns, like `web = ~/code/webapp`. Every
+directory belongs to exactly one scope. Anything you did not claim belongs to a
+built-in scope called `misc`.
+
+Real work drifts away from that rule. You open a session by hand, or a `cd`
+drops a window in the wrong place. Two commands put it back.
+
+- `tmuxscope doctor` reads the tmux server as it is now and names every break. It changes nothing.
+- `tmuxscope repair` moves the windows and merges the duplicate sessions.
+
+## How it pairs with your shell
+
+`tmuxscope hook zsh` prints a `chpwd` hook you add to `~/.zshrc`. After that,
+every `cd` is checked. When a `cd` takes a pane out of its scope, the hook calls
+`tmuxscope route`, which opens the directory in the session that owns it and
+sends your pane back where it was. Your shell stays put. Your work moves.
+
+`route` never prints the paths it decides on. It writes them into two files the
+hook creates, named by two environment variables.
+
+- `TMUXSCOPE_CD_FILE` receives the directory your shell should return to.
+- `TMUXSCOPE_EXEC_FILE` receives a line the shell runs afterwards, such as closing an empty pane.
+
+The hook creates both files, calls `route`, sources whatever came back, then
+deletes them. When either variable is empty, `route` skips that write in
+silence. So do not call `route` by hand unless you set both variables yourself.
+
+`tmuxscope hook tmux` prints the matching tmux side, which renames or folds a
+session you created by hand into the scope it belongs to. A session you are
+attached to is never dismantled underneath you.
 
 ## Requirements
 
@@ -161,18 +196,6 @@ Notes on the shapes.
 
 ## Design notes
 
-A **scope** is a name plus the paths it owns.
-
-    web = ~/code/webapp
-
-Every directory belongs to exactly one scope, and every scope gets at most one
-tmux session. Those two rules are the whole idea. Anything you have not claimed
-belongs to a built-in scope called `misc`.
-
-When a `cd` takes a pane out of its scope, tmuxscope opens the directory in the
-right session and returns your pane to where it was. Your shell stays put. Your
-work moves.
-
 Sessions you made by hand are welcome. A new session is renamed to match its
 scope, or folded into that scope's session when one already exists. A session
 you are attached to is never dismantled underneath you.
@@ -184,6 +207,17 @@ Symlinked paths are resolved before matching, so `/tmp/work` and
 
     bun test
 
+## Agent skill, optional
+
+An optional agent skill lives at `skills/tmuxscope/`. It teaches an AI coding
+agent when to call `doctor` and `repair`. Install it with
+`scripts/install-skill.sh`. The tool works exactly the same without it.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Security reports go through
+[SECURITY.md](SECURITY.md).
+
 ## License
 
-MIT
+MIT, see [LICENSE](LICENSE).

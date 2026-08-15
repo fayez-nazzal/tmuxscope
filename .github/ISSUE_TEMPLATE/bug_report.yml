@@ -1,0 +1,54 @@
+name: Bug report
+description: Something in tmuxscope does not work
+labels:
+  - bug
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: Describe the behaviour you saw.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: The exact command you ran
+      render: sh
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: The output, including the exit code
+      description: Add `echo "exit=$?"` after the command and paste both.
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: tmuxscope version
+      description: Output of `tmuxscope --version`.
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      description: For example macOS 15.5 or Ubuntu 24.04.
+    validations:
+      required: true
+  - type: input
+    id: tmux-version
+    attributes:
+      label: tmux version
+      description: Output of `tmux -V`.
+    validations:
+      required: false
