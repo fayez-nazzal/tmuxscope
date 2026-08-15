@@ -1,6 +1,6 @@
 {
   "name": "tmuxscope",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A CLI tool for AI coding agents. One tmux session per project scope, one scope per session, checked and repaired on demand.",
   "author": {
     "name": "Fayez Nazzal"

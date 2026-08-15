@@ -1,6 +1,6 @@
 {
   "name": "tmuxscope",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A tmux and shell setup tool. One tmux session per project scope, one scope per directory, checked and repaired on demand.",
   "type": "module",
   "bin": {

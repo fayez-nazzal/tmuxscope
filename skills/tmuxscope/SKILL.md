@@ -5,7 +5,7 @@ license: MIT
 compatibility: Needs `tmux` and the compiled `tmuxscope` binary on `PATH`. Build with `bun run build` after a fresh clone.
 metadata:
   author: Fayez Nazzal
-  version: "0.2.0"
+  version: "0.2.1"
 ---
 
 # tmuxscope
