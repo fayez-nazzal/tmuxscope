@@ -1,0 +1,14 @@
+{
+  "name": "tmuxscope-marketplace",
+  "owner": {
+    "name": "Fayez Nazzal",
+    "url": "https://github.com/fayez-nazzal"
+  },
+  "plugins": [
+    {
+      "name": "tmuxscope",
+      "source": "./",
+      "description": "A CLI tool for AI coding agents. One tmux session per project scope, one scope per session, checked and repaired on demand."
+    }
+  ]
+}

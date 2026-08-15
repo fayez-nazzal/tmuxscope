@@ -1,7 +1,7 @@
 {
   "name": "tmuxscope",
-  "version": "0.1.2",
-  "description": "One tmux session per project scope, one scope per session.",
+  "version": "0.2.0",
+  "description": "A CLI tool for AI coding agents. One tmux session per project scope, one scope per session, checked and repaired on demand.",
   "type": "module",
   "bin": {
     "tmuxscope": "dist/tmuxscope"
@@ -27,10 +27,21 @@
     "url": "git+https://github.com/fayez-nazzal/tmuxscope.git"
   },
   "keywords": [
+    "ai-agents",
+    "agent-tools",
+    "claude-code",
+    "codex",
+    "antigravity",
+    "grok-cli",
+    "cursor",
+    "opencode",
+    "agentic",
+    "cli",
     "tmux",
+    "tmux-session",
     "sessions",
     "zsh",
-    "cli",
-    "workspace"
+    "workspace",
+    "developer-tools"
   ]
 }

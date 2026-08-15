@@ -2,6 +2,11 @@
 
 One tmux session per project scope, and one scope per session.
 
+It is built to be called by an AI coding agent as much as by a person. Every
+command an agent needs speaks JSON on `--json`, and every outcome has its own
+exit code, so a caller can branch without reading prose. See
+[AGENTS.md](AGENTS.md) for the recipes, the field contract and the traps.
+
 ## Requirements
 
 - tmux 3.0 or newer.
