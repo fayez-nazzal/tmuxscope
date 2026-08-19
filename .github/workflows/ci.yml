@@ -10,7 +10,7 @@ jobs:
   test:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Install tmux
         run: brew install tmux
       - uses: oven-sh/setup-bun@v2
