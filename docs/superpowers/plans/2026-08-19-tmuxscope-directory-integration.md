@@ -20,4 +20,3 @@ Keep one concrete directory group per tmux window while preserving scope session
 Title: `Organize tmux panes by directory`
 
 The pull request should explain that scope sessions can contain multiple windows. Same directory groups reuse one window. Different directories use separate windows. Mixed panes are diagnosed and repaired. Pane organization and path headers are default-on independent switches.
-

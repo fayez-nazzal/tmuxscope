@@ -53,4 +53,3 @@ Turning off `@tmuxscope-pane-path` hides only the path. Turning off `@tmuxscope-
 ### Reload safety
 
 Loading the tmux hook more than once keeps the path fragment once and preserves existing border content.
-
