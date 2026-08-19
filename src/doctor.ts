@@ -1,12 +1,16 @@
 import type { Scope } from "./scopes.ts";
 import { normalizePattern, resolveScope } from "./resolve.ts";
 import { ascendingName, majorityForSession } from "./ownership.ts";
+import { directoryGroup } from "./directory-groups.ts";
+import { paneRecords } from "./tmux.ts";
 import type { TmuxState } from "./tmux.ts";
 
 export type Mixed = { session: string; windows: { index: number; path: string; scope: string }[] };
 export type Split = { scope: string; sessions: string[] };
 export type Ambiguous = { session: string; candidates: string[]; count: number; rule: string };
-export type Report = { mixed: Mixed[]; split: Split[]; ambiguous: Ambiguous[]; problems: number };
+export type MixedPane = { id: string; group: string };
+export type MixedPanes = { windowId: string; panes: MixedPane[] };
+export type Report = { mixed: Mixed[]; split: Split[]; ambiguous: Ambiguous[]; mixedPanes: MixedPanes[]; problems: number };
 
 function ascendingWindow(left: { index: number; id: string }, right: { index: number; id: string }): number {
   let order = left.index - right.index;
@@ -17,7 +21,7 @@ function ascendingWindow(left: { index: number; id: string }, right: { index: nu
 }
 
 export function doctorReport(state: TmuxState, scopes: Scope[]): Report {
-  const report: Report = { mixed: [], split: [], ambiguous: [], problems: 0 };
+  const report: Report = { mixed: [], split: [], ambiguous: [], mixedPanes: [], problems: 0 };
   const orderedSessions = state.sessions.slice().sort((left, right) => ascendingName(left.name, right.name));
   for (const session of orderedSessions) {
     const windows = state.windows.filter((window) => window.session === session.name).sort(ascendingWindow);
@@ -49,7 +53,17 @@ export function doctorReport(state: TmuxState, scopes: Scope[]): Report {
       report.split.push({ scope, sessions });
     }
   }
-  report.problems = report.mixed.length + report.split.length + report.ambiguous.length;
+  const windows = state.windows.slice().sort(ascendingWindow);
+  const panes = paneRecords(state);
+  for (const window of windows) {
+    const records = panes.filter((pane) => pane.windowId === window.id).sort((left, right) => left.index - right.index || ascendingName(left.id, right.id));
+    const groups = records.map((pane) => ({ id: pane.id, group: directoryGroup(pane.path, scopes).key }));
+    const distinct = new Set(groups.map((pane) => pane.group));
+    if (distinct.size > 1) {
+      report.mixedPanes.push({ windowId: window.id, panes: groups });
+    }
+  }
+  report.problems = report.mixed.length + report.split.length + report.ambiguous.length + report.mixedPanes.length;
   return report;
 }
 

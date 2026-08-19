@@ -54,6 +54,12 @@ test("commandFor builds a switch, a move and a rename", () => {
   expect(commandFor({ kind: "rename-session", id: "$2", name: "tools" })).toEqual(["rename-session", "-t", "$2", "tools"]);
 });
 
+test("commandFor joins a pane to an existing destination window", () => {
+  expect(commandFor({ kind: "move-pane", paneId: "%4", session: "web", windowId: "@8" })).toEqual([
+    "join-pane", "-d", "-s", "%4", "-t", "@8",
+  ]);
+});
+
 test("commandFor breaks a pane into a detached window and prints its id", () => {
   expect(commandFor({ kind: "move-pane", paneId: "%4", session: "web" })).toEqual([
     "break-pane", "-d", "-s", "%4", "-P", "-F", "#{window_id}",
@@ -75,6 +81,20 @@ test("tmux apply moves a broken pane window into the destination session", () =>
     ["tmux", "break-pane", "-d", "-s", "%4", "-P", "-F", "#{window_id}"],
     ["tmux", "move-window", "-s", "@new", "-t", "web:"],
   ]);
+});
+
+test("tmux apply joins a pane to an existing destination window", () => {
+  const calls: string[][] = [];
+  setTmuxSpawn(((file, args) => {
+    calls.push([file, ...args]);
+    return { status: 0, stdout: "", stderr: "" } as any;
+  }) as typeof realSpawnSync);
+  try {
+    tmux.apply({ kind: "move-pane", paneId: "%4", session: "web", windowId: "@8" });
+  } finally {
+    setTmuxSpawn(realSpawnSync);
+  }
+  expect(calls).toEqual([["tmux", "join-pane", "-d", "-s", "%4", "-t", "@8"]]);
 });
 
 test("parseSessions skips incomplete lines", () => {

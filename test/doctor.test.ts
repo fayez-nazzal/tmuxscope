@@ -32,9 +32,21 @@ const SPLIT: TmuxState = {
   panes: [],
 };
 
+const MIXED_PANES: TmuxState = {
+  sessions: [
+    { id: "$0", name: "web", windows: 1, attached: true },
+    { id: "$1", name: "api", windows: 0, attached: false },
+  ],
+  windows: [{ id: "@0", index: 1, session: "web", path: "/w/webapp" }],
+  panes: [
+    { id: "%0", index: 0, windowId: "@0", session: "web", path: "/w/webapp", active: true },
+    { id: "%1", index: 1, windowId: "@0", session: "web", path: "/w/api-service", active: false },
+  ],
+};
+
 test("a clean state reports no problems", () => {
   const state: TmuxState = { sessions: [{ id: "$0", name: "web", windows: 1, attached: true }], windows: [{ id: "@0", index: 1, session: "web", path: "/w/webapp" }], panes: [] };
-  expect(doctorReport(state, SCOPES)).toEqual({ mixed: [], split: [], ambiguous: [], problems: 0 });
+  expect(doctorReport(state, SCOPES)).toEqual({ mixed: [], split: [], ambiguous: [], mixedPanes: [], problems: 0 });
 });
 
 test("a session holding two scopes is reported as mixed, and an even split also reports as ambiguous", () => {
@@ -50,6 +62,13 @@ test("a scope spread over two sessions is reported as split", () => {
   const report = doctorReport(SPLIT, SCOPES);
   expect(report.problems).toBe(1);
   expect(report.split).toEqual([{ scope: "api", sessions: ["api", "api-2"] }]);
+});
+
+test("a window holding panes from two directory groups is reported", () => {
+  const report = doctorReport(MIXED_PANES, SCOPES);
+  expect(report.mixedPanes).toEqual([{ windowId: "@0", panes: [{ id: "%0", group: "/w/webapp" }, { id: "%1", group: "/w/api-service" }] }]);
+  expect(report.problems).toBe(1);
+  expect(repairPlan(report, MIXED_PANES, SCOPES).actions).toEqual([{ kind: "move-pane", paneId: "%1", session: "api" }]);
 });
 
 test("repairPlan never leaves the unsatisfiable list empty and the actions list non-empty at the same time", () => {

@@ -15,7 +15,7 @@ export type Action =
   | { kind: "new-window"; session: string; cwd: string }
   | { kind: "switch"; target: string }
   | { kind: "move-window"; windowId: string; session: string }
-  | { kind: "move-pane"; paneId: string; session: string }
+  | { kind: "move-pane"; paneId: string; session: string; windowId?: string }
   | { kind: "rename-session"; id: string; name: string }
   | { kind: "select-window"; windowId: string };
 
@@ -126,7 +126,11 @@ export function commandFor(action: Action): string[] {
     command = ["move-window", "-s", action.windowId, "-t", `${action.session}:`];
   }
   if (action.kind === "move-pane") {
-    command = ["break-pane", "-d", "-s", action.paneId, "-P", "-F", "#{window_id}"];
+    if (action.windowId) {
+      command = ["join-pane", "-d", "-s", action.paneId, "-t", action.windowId];
+    } else {
+      command = ["break-pane", "-d", "-s", action.paneId, "-P", "-F", "#{window_id}"];
+    }
   }
   if (action.kind === "rename-session") {
     command = ["rename-session", "-t", action.id, action.name];
@@ -182,8 +186,12 @@ export const tmux: Tmux = {
   },
   apply(action: Action) {
     if (action.kind === "move-pane") {
-      const windowId = run(commandFor(action)).trim();
-      run(["move-window", "-s", windowId, "-t", `${action.session}:`]);
+      if (action.windowId) {
+        run(commandFor(action));
+      } else {
+        const windowId = run(commandFor(action)).trim();
+        run(["move-window", "-s", windowId, "-t", `${action.session}:`]);
+      }
     } else {
       run(commandFor(action));
     }
