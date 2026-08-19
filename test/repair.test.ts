@@ -23,6 +23,7 @@ const TWO_MIXED: TmuxState = {
     { id: "@4", index: 2, session: "api", path: "/w/api-service/app" },
     { id: "@5", index: 3, session: "api", path: "/w/webapp/src" },
   ],
+  panes: [],
 };
 
 const NAME_COLLISION: TmuxState = {
@@ -32,6 +33,7 @@ const NAME_COLLISION: TmuxState = {
     { id: "@1", index: 2, session: "api", path: "/w/webapp/src" },
     { id: "@2", index: 3, session: "api", path: "/w/api-service" },
   ],
+  panes: [],
 };
 
 const CONTESTED_LOSER: TmuxState = {
@@ -44,6 +46,7 @@ const CONTESTED_LOSER: TmuxState = {
     { id: "@1", index: 1, session: "api", path: "/w/api-service/app" },
     { id: "@2", index: 2, session: "api", path: "/w/webapp" },
   ],
+  panes: [],
 };
 
 const MIXED_BESIDE_CLEAN: TmuxState = {
@@ -58,6 +61,7 @@ const MIXED_BESIDE_CLEAN: TmuxState = {
     { id: "@3", index: 1, session: "main", path: "/home/me/docs" },
     { id: "@4", index: 2, session: "main", path: "/home/me/dl" },
   ],
+  panes: [],
 };
 
 const MIXED_HOLDING_HOME: TmuxState = {
@@ -72,6 +76,7 @@ const MIXED_HOLDING_HOME: TmuxState = {
     { id: "@3", index: 1, session: "main", path: "/home/me/docs" },
     { id: "@4", index: 2, session: "main", path: "/home/me/dl" },
   ],
+  panes: [],
 };
 
 function applyActions(state: TmuxState, actions: Action[]): TmuxState {
@@ -275,7 +280,7 @@ function seeded(seed: number): () => number {
 }
 
 function fuzzState(random: () => number): TmuxState {
-  const state: TmuxState = { sessions: [], windows: [] };
+  const state: TmuxState = { sessions: [], windows: [], panes: [] };
   const pool = NAMES.slice();
   const sessionCount = 1 + Math.floor(random() * 4);
   let windowId = 0;

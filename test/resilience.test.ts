@@ -19,6 +19,7 @@ const STRAY: TmuxState = {
     { id: "@1", index: 2, session: "api", path: "/w/api-service.tasks-1" },
     { id: "@2", index: 3, session: "api", path: "/w/webapp" },
   ],
+  panes: [],
 };
 
 function fakeTmux(failOn: Action["kind"][]): { client: Tmux; applied: Action[] } {
@@ -52,7 +53,7 @@ test("a session that only holds a stray window of a scope does not own that scop
 });
 
 test("a session whose windows are mostly one scope owns that scope even when it is named otherwise", () => {
-  const renamed: TmuxState = { sessions: [{ id: "$0", name: "old", windows: 1, attached: false }], windows: [{ id: "@0", index: 1, session: "old", path: "/w/webapp" }] };
+  const renamed: TmuxState = { sessions: [{ id: "$0", name: "old", windows: 1, attached: false }], windows: [{ id: "@0", index: 1, session: "old", path: "/w/webapp" }], panes: [] };
   expect(sessionForScope(renamed, SCOPES, "web")).toBe("old");
 });
 
@@ -93,6 +94,7 @@ test("adopt never drains the session a client is sitting in", () => {
       { id: "@0", index: 1, session: "web", path: "/w/webapp" },
       { id: "@9", index: 1, session: "web2", path: "/w/webapp" },
     ],
+    panes: [],
   };
   const plan = adoptPlan({ sessionId: "$9", sessionName: "web2", windows: [{ id: "@9", path: "/w/webapp" }], scopes: SCOPES, state, attached: true });
   expect(plan.actions).toEqual([]);

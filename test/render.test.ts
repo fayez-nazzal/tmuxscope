@@ -13,6 +13,7 @@ const SCOPES: Scope[] = [
 const STATE: TmuxState = {
   sessions: [{ id: "$0", name: "web", windows: 2, attached: true }],
   windows: [{ id: "@0", index: 1, session: "web", path: "/w/webapp" }],
+  panes: [],
 };
 
 test("listRows covers every configured scope plus misc", () => {

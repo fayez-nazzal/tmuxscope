@@ -18,6 +18,7 @@ const MIXED: TmuxState = {
     { id: "@1", index: 2, session: "web", path: "/w/api-service" },
     { id: "@2", index: 1, session: "api", path: "/w/api-service" },
   ],
+  panes: [],
 };
 
 function fakeTmux(state: TmuxState, applied: Action[]): Tmux {
@@ -128,7 +129,7 @@ test("repair --json --dry-run lists the actions and applies nothing", () => {
 });
 
 test("repair --json on a clean tree reports applied with no actions", () => {
-  const clean: TmuxState = { sessions: [{ id: "$0", name: "web", windows: 1, attached: false }], windows: [{ id: "@0", index: 1, session: "web", path: "/w/webapp" }] };
+  const clean: TmuxState = { sessions: [{ id: "$0", name: "web", windows: 1, attached: false }], windows: [{ id: "@0", index: 1, session: "web", path: "/w/webapp" }], panes: [] };
   const applied: Action[] = [];
   const { payload } = jsonFrom(() => {
     cmdRepair(fakeTmux(clean, applied), SCOPES, false, true);

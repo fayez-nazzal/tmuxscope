@@ -19,6 +19,7 @@ const STATE: TmuxState = {
     { id: "@1", index: 2, session: "api", path: "/w/api-service.tasks-1" },
     { id: "@2", index: 1, session: "web", path: "/w/webapp" },
   ],
+  panes: [],
 };
 
 function input(overrides: Partial<Parameters<typeof routePlan>[0]> = {}) {
@@ -87,6 +88,7 @@ test("sessionForScope misattributes a target session when the origin window alre
   const staleState: TmuxState = {
     sessions: [{ id: "$0", name: "api", windows: 1, attached: true }],
     windows: [{ id: "@0", index: 1, session: "api", path: "/w/webapp" }],
+    panes: [],
   };
   expect(sessionForScope(staleState, SCOPES, "web")).toBe("api");
 });
@@ -95,9 +97,10 @@ test("excluding the origin window before planning avoids that misattribution", (
   const staleState: TmuxState = {
     sessions: [{ id: "$0", name: "api", windows: 1, attached: true }],
     windows: [{ id: "@0", index: 1, session: "api", path: "/w/webapp" }],
+    panes: [],
   };
   const routeWindows = staleState.windows.filter((window) => window.id !== "@0");
-  const routeState: TmuxState = { sessions: staleState.sessions, windows: routeWindows };
+  const routeState: TmuxState = { sessions: staleState.sessions, windows: routeWindows, panes: [] };
   expect(sessionForScope(routeState, SCOPES, "web")).toBe(null);
   const plan = routePlan(input({ state: routeState, panesInSession: 1 }));
   expect(plan.actions).toEqual([
@@ -110,8 +113,9 @@ test("a session left window-less by excluding the origin window is never mistake
   const soleSession: TmuxState = {
     sessions: [{ id: "$0", name: "seed", windows: 1, attached: true }],
     windows: [{ id: "@0", index: 1, session: "seed", path: "/w/api-service" }],
+    panes: [],
   };
-  const routeState: TmuxState = { sessions: soleSession.sessions, windows: [] };
+  const routeState: TmuxState = { sessions: soleSession.sessions, windows: [], panes: [] };
   expect(sessionForScope(routeState, SCOPES, "misc")).toBe(null);
   const plan = routePlan(input({ target: "/w/elsewhere", originPath: "/w/api-service", state: routeState, panesInSession: 1 }));
   expect(plan.actions).toEqual([

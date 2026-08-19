@@ -17,7 +17,7 @@ import type { RouteInput } from "./route.ts";
 import { renderAction, renderConfigReport, renderDoctor, renderList } from "./render.ts";
 import { goTarget } from "./go.ts";
 import type { GoTarget, PathProbe } from "./go.ts";
-import { applyAll, tmux } from "./tmux.ts";
+import { applyAll, paneRecords, tmux } from "./tmux.ts";
 import type { Action, Tmux, TmuxState } from "./tmux.ts";
 import { TMUX_HOOK, ZSH_HOOK } from "./hooks.ts";
 import packageJson from "../package.json";
@@ -98,7 +98,7 @@ export function cmdRoute(client: Tmux, path: string, scopes: Scope[], env: Route
   const state = client.state();
   const context = client.paneContext(env.paneId);
   const routeWindows = state.windows.filter((window) => window.id !== context.windowId);
-  const routeState: TmuxState = { sessions: state.sessions, windows: routeWindows };
+  const routeState: TmuxState = { sessions: state.sessions, windows: routeWindows, panes: paneRecords(state).filter((pane) => pane.windowId !== context.windowId) };
   const paneWork = client.paneWork(env.paneId);
   const panesInSession = client.panesInSession(context.session);
   const routeInput: RouteInput = { target: path, originPath: env.originPath, paneWork, panesInSession, scopes, state: routeState };

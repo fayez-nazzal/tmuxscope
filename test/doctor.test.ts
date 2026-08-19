@@ -16,6 +16,7 @@ const MIXED: TmuxState = {
     { id: "@0", index: 1, session: "db", path: "/w/db-service" },
     { id: "@1", index: 2, session: "db", path: "/w/webapp" },
   ],
+  panes: [],
 };
 
 const SPLIT: TmuxState = {
@@ -28,10 +29,11 @@ const SPLIT: TmuxState = {
     { id: "@1", index: 2, session: "api", path: "/w/api-service.tasks-1" },
     { id: "@2", index: 1, session: "api-2", path: "/w/api-service.tasks-2" },
   ],
+  panes: [],
 };
 
 test("a clean state reports no problems", () => {
-  const state: TmuxState = { sessions: [{ id: "$0", name: "web", windows: 1, attached: true }], windows: [{ id: "@0", index: 1, session: "web", path: "/w/webapp" }] };
+  const state: TmuxState = { sessions: [{ id: "$0", name: "web", windows: 1, attached: true }], windows: [{ id: "@0", index: 1, session: "web", path: "/w/webapp" }], panes: [] };
   expect(doctorReport(state, SCOPES)).toEqual({ mixed: [], split: [], ambiguous: [], problems: 0 });
 });
 
@@ -51,12 +53,12 @@ test("a scope spread over two sessions is reported as split", () => {
 });
 
 test("repairPlan never leaves the unsatisfiable list empty and the actions list non-empty at the same time", () => {
-  const cleanState: TmuxState = { sessions: [{ id: "$0", name: "web", windows: 1, attached: true }], windows: [{ id: "@0", index: 1, session: "web", path: "/w/webapp" }] };
+  const cleanState: TmuxState = { sessions: [{ id: "$0", name: "web", windows: 1, attached: true }], windows: [{ id: "@0", index: 1, session: "web", path: "/w/webapp" }], panes: [] };
   expect(repairPlan(doctorReport(cleanState, SCOPES), cleanState, SCOPES)).toEqual({ actions: [], unsatisfiable: [] });
 });
 
 test("repair moves a stray window to the owning session", () => {
-  const state: TmuxState = { sessions: [...MIXED.sessions, { id: "$1", name: "web", windows: 1, attached: false }], windows: [...MIXED.windows, { id: "@2", index: 1, session: "web", path: "/w/webapp" }] };
+  const state: TmuxState = { sessions: [...MIXED.sessions, { id: "$1", name: "web", windows: 1, attached: false }], windows: [...MIXED.windows, { id: "@2", index: 1, session: "web", path: "/w/webapp" }], panes: [] };
   expect(repairPlan(doctorReport(state, SCOPES), state, SCOPES).actions).toEqual([{ kind: "move-window", windowId: "@1", session: "web" }]);
 });
 
@@ -83,6 +85,7 @@ test("repair renames the session that already holds a scope instead of creating 
       { id: "@2", index: 3, session: "db", path: "/w/db-service" },
       { id: "@3", index: 1, session: "api2", path: "/w/api-service.tasks-2" },
     ],
+    panes: [],
   };
   const actions = repairPlan(doctorReport(state, SCOPES), state, SCOPES).actions;
   expect(actions).toEqual([
@@ -128,6 +131,7 @@ const PERMUTATION_STATE: TmuxState = {
     { id: "@3", index: 1, session: "api2", path: "/w/api-service.tasks-2" },
     { id: "@4", index: 1, session: "misc", path: "/home/me" },
   ],
+  panes: [],
 };
 
 test("doctorReport is permutation invariant across a shuffled sessions and windows order", () => {
@@ -137,6 +141,7 @@ test("doctorReport is permutation invariant across a shuffled sessions and windo
     const shuffledState: TmuxState = {
       sessions: shuffled(PERMUTATION_STATE.sessions, random),
       windows: shuffled(PERMUTATION_STATE.windows, random),
+      panes: [],
     };
     expect(doctorReport(shuffledState, SCOPES)).toEqual(baseline);
   }
@@ -147,6 +152,7 @@ test("swapping the window order of a two scope session leaves the verdict unchan
   const swapped: TmuxState = {
     sessions: MIXED.sessions,
     windows: [MIXED.windows[1]!, MIXED.windows[0]!],
+    panes: [],
   };
   const after = doctorReport(swapped, SCOPES);
   expect(after).toEqual(before);
