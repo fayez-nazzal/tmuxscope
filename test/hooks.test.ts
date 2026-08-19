@@ -53,6 +53,10 @@ test("the tmux hook appends an idempotent home-relative pane path fragment", () 
   expect(TMUX_HOOK).toContain("~");
 });
 
+test("the pane path command uses tmux-safe single quoting", () => {
+  expect(TMUX_HOOK).toContain("if-shell -F '#{!=:#{@tmuxscope-pane-path-installed},1}' 'set-option");
+});
+
 test("the tmux hook quotes the session id so a shell does not read it as a positional parameter", () => {
   const dir = mkdtempSync(join(tmpdir(), "tmuxscope-hook-"));
   const stub = join(dir, "tmuxscope");

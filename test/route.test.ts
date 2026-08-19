@@ -88,6 +88,26 @@ test("two worktrees in one scope use separate windows", () => {
   ]);
 });
 
+test("same-scope routing never reuses the origin window", () => {
+  const scopes: Scope[] = [{ name: "feos", patterns: ["/w/feos*"] }];
+  const state: TmuxState = {
+    sessions: [{ id: "$0", name: "feos", windows: 1, attached: true }],
+    windows: [{ id: "@0", index: 1, session: "feos", path: "/w/feos.other" }],
+    panes: [],
+  };
+  const target = "/w/feos.other";
+  const plan = routePlan({
+    ...input({ target, originPath: "/w/feos.fix", scopes, state }),
+    originWindowId: "@0",
+    targetGroup: directoryGroup(target, scopes),
+    originGroup: directoryGroup("/w/feos.fix", scopes),
+  });
+  expect(plan.actions).toEqual([
+    { kind: "new-window", session: "feos", cwd: target },
+    { kind: "switch", target: "feos" },
+  ]);
+});
+
 test("an unmatched directory uses its own group", () => {
   const target = "/w/elsewhere";
   const plan = routePlan(input({ target, originPath: "/w/other", state: { sessions: [], windows: [], panes: [] } }));

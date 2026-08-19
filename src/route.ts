@@ -9,6 +9,7 @@ export type RouteInput = {
   originPath: string;
   targetGroup: DirectoryGroup;
   originGroup: DirectoryGroup;
+  originWindowId?: string;
   paneWork: number;
   panesInSession: number;
   scopes: Scope[];
@@ -22,9 +23,12 @@ export type RoutePlan = {
   message: string;
 };
 
-function idleWindow(state: TmuxState, session: string, targetGroup: DirectoryGroup, scopes: Scope[]): string | null {
+function idleWindow(state: TmuxState, session: string, targetGroup: DirectoryGroup, scopes: Scope[], originWindowId: string): string | null {
   let found: string | null = null;
   const match = state.windows.find((window) => {
+    if (window.id === originWindowId) {
+      return false;
+    }
     let paths = state.panes.filter((pane) => pane.windowId === window.id).map((pane) => pane.path);
     if (paths.length === 0) {
       paths = [window.path];
@@ -45,7 +49,7 @@ export function routePlan(input: RouteInput): RoutePlan {
     let reused = false;
     if (existing) {
       session = existing;
-      const idle = idleWindow(input.state, session, input.targetGroup, input.scopes);
+      const idle = idleWindow(input.state, session, input.targetGroup, input.scopes, input.originWindowId || "");
       if (idle) {
         reused = true;
         plan.actions.push({ kind: "select-window", windowId: idle });

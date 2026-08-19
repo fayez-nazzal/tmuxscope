@@ -108,7 +108,7 @@ export function cmdRoute(client: Tmux, path: string, scopes: Scope[], env: Route
   const routeState: TmuxState = { sessions: state.sessions, windows: routeWindows, panes: routePanes };
   const paneWork = client.paneWork(env.paneId);
   const panesInSession = client.panesInSession(context.session);
-  const routeInput: RouteInput = { target: path, originPath: env.originPath, targetGroup, originGroup, paneWork, panesInSession, scopes, state: routeState };
+  const routeInput: RouteInput = { target: path, originPath: env.originPath, originWindowId: context.windowId, targetGroup, originGroup, paneWork, panesInSession, scopes, state: routeState };
   const plan = routePlan(routeInput);
   if (plan.origin === "restore" && env.cdFile) {
     env.write(env.cdFile, plan.cdPath);
