@@ -18,6 +18,16 @@ const MIXED: TmuxState = {
     { id: "@1", index: 2, session: "web", path: "/w/api-service" },
     { id: "@2", index: 1, session: "api", path: "/w/api-service" },
   ],
+  panes: [],
+};
+
+const MIXED_PANES: TmuxState = {
+  sessions: [{ id: "$0", name: "web", windows: 1, attached: true }, { id: "$1", name: "api", windows: 0, attached: false }],
+  windows: [{ id: "@0", index: 1, session: "web", path: "/w/webapp" }],
+  panes: [
+    { id: "%0", index: 0, windowId: "@0", session: "web", path: "/w/webapp", active: true },
+    { id: "%1", index: 1, windowId: "@0", session: "web", path: "/w/api-service", active: false },
+  ],
 };
 
 function fakeTmux(state: TmuxState, applied: Action[]): Tmux {
@@ -115,6 +125,16 @@ test("doctor --json reports the same problems the table reports", () => {
   expect(report.config).toContainEqual({ kind: "missingDirectory", scope: "web", pattern: "/w/webapp" });
 });
 
+test("doctor --json reports mixed directory groups inside a window", () => {
+  const { payload, exits } = jsonFrom(() => {
+    cmdDoctor(fakeTmux(MIXED_PANES, []), SCOPES, true);
+  });
+  const report = payload as { problems: number; mixedPanes: { windowId: string; panes: { id: string; group: string }[] }[] };
+  expect(exits).toEqual([1]);
+  expect(report.problems).toBe(1);
+  expect(report.mixedPanes).toEqual([{ windowId: "@0", panes: [{ id: "%0", group: "/w/webapp" }, { id: "%1", group: "/w/api-service" }] }]);
+});
+
 test("repair --json --dry-run lists the actions and applies nothing", () => {
   const applied: Action[] = [];
   const { payload } = jsonFrom(() => {
@@ -128,7 +148,7 @@ test("repair --json --dry-run lists the actions and applies nothing", () => {
 });
 
 test("repair --json on a clean tree reports applied with no actions", () => {
-  const clean: TmuxState = { sessions: [{ id: "$0", name: "web", windows: 1, attached: false }], windows: [{ id: "@0", index: 1, session: "web", path: "/w/webapp" }] };
+  const clean: TmuxState = { sessions: [{ id: "$0", name: "web", windows: 1, attached: false }], windows: [{ id: "@0", index: 1, session: "web", path: "/w/webapp" }], panes: [] };
   const applied: Action[] = [];
   const { payload } = jsonFrom(() => {
     cmdRepair(fakeTmux(clean, applied), SCOPES, false, true);

@@ -20,6 +20,7 @@ const MIXED: TmuxState = {
     { id: "@2", index: 3, session: "db", path: "/w/db-service" },
     { id: "@3", index: 1, session: "api2", path: "/w/api-service.tasks-2" },
   ],
+  panes: [],
 };
 
 function fakeExit(): { calls: number[]; restore: () => void } {
@@ -94,7 +95,7 @@ test("a fake whose third apply throws prints only the landed actions, names the 
 });
 
 test("a fixable state ends clean and exits with no error", () => {
-  const state: TmuxState = { sessions: [...MIXED.sessions], windows: [...MIXED.windows] };
+  const state: TmuxState = { sessions: [...MIXED.sessions], windows: [...MIXED.windows], panes: [] };
   const client: Tmux = {
     state(): TmuxState {
       return state;

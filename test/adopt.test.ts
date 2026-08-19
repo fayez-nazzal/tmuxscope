@@ -23,20 +23,23 @@ const STATE: TmuxState = {
     { id: "@0", index: 1, session: "web", path: "/w/webapp" },
     { id: "@9", index: 1, session: "scratch", path: "/w/toolkit" },
   ],
+  panes: [],
 };
 
 function stubTmux(state: TmuxState): { log: string; env: Record<string, string> } {
   const dir = mkdtempSync(join(tmpdir(), "tmuxscope-adopt-"));
   const sessionLines = state.sessions.map((session) => [session.id, session.name, String(session.windows), "0"].join(FIELD));
   const windowLines = state.windows.map((window) => [window.id, String(window.index), window.session, window.path].join(FIELD));
+  const paneLines = state.windows.map((window) => [`${window.id}:0`, "0", window.id, window.session, window.path, "1"].join(FIELD));
   writeFileSync(join(dir, "sessions"), `${sessionLines.join("\n")}\n`);
   writeFileSync(join(dir, "windows"), `${windowLines.join("\n")}\n`);
+  writeFileSync(join(dir, "panes"), `${paneLines.join("\n")}\n`);
   const config = join(dir, "scopes.conf");
   writeFileSync(config, SCOPES.map((scope) => `${scope.name} = ${scope.patterns.join(" ")}`).join("\n"));
   const log = join(dir, "log");
   writeFileSync(log, "");
   const stub = join(dir, "tmux");
-  writeFileSync(stub, `#!/bin/sh\ncase "$1" in\n  list-sessions) cat ${dir}/sessions ;;\n  list-windows) cat ${dir}/windows ;;\n  *) echo "$@" >> ${log} ;;\nesac\n`);
+  writeFileSync(stub, `#!/bin/sh\ncase "$1" in\n  list-sessions) cat ${dir}/sessions ;;\n  list-windows) cat ${dir}/windows ;;\n  list-panes) cat ${dir}/panes ;;\n  *) echo "$@" >> ${log} ;;\nesac\n`);
   chmodSync(stub, 0o755);
   const env = { ...process.env, PATH: `${dir}:${process.env.PATH}`, TMUXSCOPE_CONFIG: config } as Record<string, string>;
   return { log, env };
@@ -62,6 +65,7 @@ test("the windows of the new session itself never make it look like the scope al
       { id: "@8", index: 1, session: "scratch", path: "/w/toolkit" },
       { id: "@9", index: 2, session: "scratch", path: "/w/toolkit/app" },
     ],
+    panes: [],
   };
   const windows = [{ id: "@8", path: "/w/toolkit" }, { id: "@9", path: "/w/toolkit/app" }];
   const plan = adoptPlan({ sessionId: "$9", sessionName: "scratch", windows, scopes: SCOPES, state: lonely, attached: false });
@@ -105,6 +109,7 @@ test("a session named after its scope survives an origin window that still shows
       { id: "@0", index: 1, session: "api", path: "/w/webapp" },
       { id: "@7", index: 1, session: "web", path: "/w/webapp" },
     ],
+    panes: [],
   };
   const plan = adoptPlan({ sessionId: "$7", sessionName: "web", windows: [{ id: "@7", path: "/w/webapp" }], scopes: SCOPES, state: afterRoute, attached: false });
   expect(plan.actions).toEqual([]);
@@ -132,6 +137,7 @@ test("adopt leaves the session route just created where it is", () => {
       { id: "@0", index: 1, session: "api", path: "/w/webapp" },
       { id: "@7", index: 1, session: "web", path: "/w/webapp" },
     ],
+    panes: [],
   };
   expect(runAdopt(afterRoute, "$7")).toBe("");
 });

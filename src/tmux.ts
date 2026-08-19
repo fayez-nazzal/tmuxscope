@@ -1,10 +1,13 @@
 import { spawnSync } from "node:child_process";
 
+let tmuxSpawn = spawnSync;
+
 export const FIELD = "\u001f";
 
 export type SessionInfo = { id: string; name: string; windows: number; attached: boolean };
 export type WindowInfo = { id: string; index: number; session: string; path: string };
-export type TmuxState = { sessions: SessionInfo[]; windows: WindowInfo[] };
+export type PaneInfo = { id: string; index: number; windowId: string; session: string; path: string; active: boolean };
+export type TmuxState = { sessions: SessionInfo[]; windows: WindowInfo[]; panes: PaneInfo[] };
 export type PaneContext = { session: string; windowId: string };
 
 export type Action =
@@ -12,6 +15,7 @@ export type Action =
   | { kind: "new-window"; session: string; cwd: string }
   | { kind: "switch"; target: string }
   | { kind: "move-window"; windowId: string; session: string }
+  | { kind: "move-pane"; paneId: string; session: string; windowId?: string }
   | { kind: "rename-session"; id: string; name: string }
   | { kind: "select-window"; windowId: string };
 
@@ -22,6 +26,7 @@ export interface Tmux {
   paneContext(paneId: string): PaneContext;
   apply(action: Action): void;
   message(text: string): void;
+  option?(name: string): string;
 }
 
 export function parsePaneContext(text: string): PaneContext {
@@ -65,6 +70,48 @@ export function parseWindows(text: string): WindowInfo[] {
   return windows;
 }
 
+export function parsePanes(text: string): PaneInfo[] {
+  const panes: PaneInfo[] = [];
+  for (const line of text.split("\n")) {
+    if (line.length > 0) {
+      const parts = line.split(FIELD);
+      if (parts.length >= 6) {
+        const id = parts[0];
+        const index = Number(parts[1]);
+        const windowId = parts[2];
+        const session = parts[3];
+        const path = parts[4];
+        const active = parts[5] === "1";
+        panes.push({ id, index, windowId, session, path, active });
+      }
+    }
+  }
+  return panes;
+}
+
+export function legacyPanes(state: Pick<TmuxState, "windows">): PaneInfo[] {
+  return state.windows.map((window) => ({
+    id: `${window.id}:0`,
+    index: 0,
+    windowId: window.id,
+    session: window.session,
+    path: window.path,
+    active: true,
+  }));
+}
+
+export function paneRecords(state: TmuxState): PaneInfo[];
+export function paneRecords(state: Pick<TmuxState, "windows"> & { panes?: PaneInfo[] }): PaneInfo[];
+export function paneRecords(state: Pick<TmuxState, "windows"> & { panes?: PaneInfo[] }): PaneInfo[] {
+  let panes: PaneInfo[];
+  if ("panes" in state) {
+    panes = state.panes || [];
+  } else {
+    panes = legacyPanes(state);
+  }
+  return panes;
+}
+
 export function commandFor(action: Action): string[] {
   let command: string[] = [];
   if (action.kind === "new-session") {
@@ -79,6 +126,13 @@ export function commandFor(action: Action): string[] {
   if (action.kind === "move-window") {
     command = ["move-window", "-s", action.windowId, "-t", `${action.session}:`];
   }
+  if (action.kind === "move-pane") {
+    if (action.windowId) {
+      command = ["join-pane", "-d", "-s", action.paneId, "-t", action.windowId];
+    } else {
+      command = ["break-pane", "-d", "-s", action.paneId, "-P", "-F", "#{window_id}"];
+    }
+  }
   if (action.kind === "rename-session") {
     command = ["rename-session", "-t", action.id, action.name];
   }
@@ -92,7 +146,7 @@ export function commandFor(action: Action): string[] {
 }
 
 export function run(args: string[]): string {
-  const result = spawnSync("tmux", args, { encoding: "utf8" });
+  const result = tmuxSpawn("tmux", args, { encoding: "utf8" });
   let output = "";
   if (result.status === 0 && typeof result.stdout === "string") {
     output = result.stdout;
@@ -111,11 +165,16 @@ export function run(args: string[]): string {
   return output;
 }
 
+export function setTmuxSpawn(spawn: typeof spawnSync): void {
+  tmuxSpawn = spawn;
+}
+
 export const tmux: Tmux = {
   state(): TmuxState {
     const sessions = parseSessions(run(["list-sessions", "-F", `#{session_id}${FIELD}#{session_name}${FIELD}#{session_windows}${FIELD}#{session_attached}`]));
     const windows = parseWindows(run(["list-windows", "-a", "-F", `#{window_id}${FIELD}#{window_index}${FIELD}#{session_name}${FIELD}#{pane_current_path}`]));
-    return { sessions, windows };
+    const panes = parsePanes(run(["list-panes", "-a", "-F", `#{pane_id}${FIELD}#{pane_index}${FIELD}#{window_id}${FIELD}#{session_name}${FIELD}#{pane_current_path}${FIELD}#{pane_active}`]));
+    return { sessions, windows, panes };
   },
   paneWork(paneId: string): number {
     return Number(run(["show-options", "-pqv", "-t", paneId, "@tmuxscope_work"]).trim() || "0");
@@ -127,10 +186,22 @@ export const tmux: Tmux = {
     return parsePaneContext(run(["display-message", "-p", "-t", paneId, `#{session_name}${FIELD}#{window_id}`]));
   },
   apply(action: Action) {
-    run(commandFor(action));
+    if (action.kind === "move-pane") {
+      if (action.windowId) {
+        run(commandFor(action));
+      } else {
+        const windowId = run(commandFor(action)).trim();
+        run(["move-window", "-s", windowId, "-t", `${action.session}:`]);
+      }
+    } else {
+      run(commandFor(action));
+    }
   },
   message(text: string) {
     run(["display-message", text]);
+  },
+  option(name: string): string {
+    return run(["show-options", "-gqv", name]).trim();
   },
 };
 

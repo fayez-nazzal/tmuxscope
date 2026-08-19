@@ -24,7 +24,33 @@ test("the zsh hook is valid zsh", () => {
 });
 
 test("the tmux hook wires session-created to adopt", () => {
-  expect(TMUX_HOOK.trim()).toBe(`set-hook -g session-created "run-shell \\"tmuxscope adopt '#{session_id}'\\""`);
+  expect(TMUX_HOOK).toContain(`set-hook -g session-created "run-shell \\"tmuxscope adopt '#{session_id}'\\""`);
+});
+
+test("the tmux hook organizes panes after splits and focus changes when enabled", () => {
+  expect(TMUX_HOOK).toContain("@tmuxscope-organize-panes");
+  expect(TMUX_HOOK).toContain("after-split-window");
+  expect(TMUX_HOOK).toContain("pane-focus-in");
+  expect(TMUX_HOOK).toContain("tmuxscope organize --hook");
+  expect(TMUX_HOOK).toContain("#{!=:#{@tmuxscope-organize-panes},0}");
+});
+
+test("the tmux hook treats unset organization and path switches as enabled", () => {
+  expect(TMUX_HOOK).toContain("#{!=:#{@tmuxscope-organize-panes},0}");
+  expect(TMUX_HOOK).toContain("#{!=:#{@tmuxscope-pane-path},0}");
+});
+
+test("the tmux hook treats off organization and path switches as disabled", () => {
+  expect(TMUX_HOOK).toContain("#{!=:#{@tmuxscope-organize-panes},off}");
+  expect(TMUX_HOOK).toContain("#{!=:#{@tmuxscope-pane-path},off}");
+});
+
+test("the tmux hook appends an idempotent home-relative pane path fragment", () => {
+  expect(TMUX_HOOK).toContain("pane-border-format");
+  expect(TMUX_HOOK).toContain("pane-border-status top");
+  expect(TMUX_HOOK).toContain("pane_current_path");
+  expect(TMUX_HOOK).toContain("@tmuxscope-pane-path-installed");
+  expect(TMUX_HOOK).toContain("~");
 });
 
 test("the tmux hook quotes the session id so a shell does not read it as a positional parameter", () => {

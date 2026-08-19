@@ -14,10 +14,12 @@ import { repairPlan } from "./repair.ts";
 import type { RepairResult } from "./repair.ts";
 import { routePlan } from "./route.ts";
 import type { RouteInput } from "./route.ts";
+import { organizePlan } from "./organize.ts";
+import { directoryGroup } from "./directory-groups.ts";
 import { renderAction, renderConfigReport, renderDoctor, renderList } from "./render.ts";
 import { goTarget } from "./go.ts";
 import type { GoTarget, PathProbe } from "./go.ts";
-import { applyAll, tmux } from "./tmux.ts";
+import { applyAll, paneRecords, tmux } from "./tmux.ts";
 import type { Action, Tmux, TmuxState } from "./tmux.ts";
 import { TMUX_HOOK, ZSH_HOOK } from "./hooks.ts";
 import packageJson from "../package.json";
@@ -35,6 +37,7 @@ USAGE
   tmuxscope list [--json]             every scope, its session and its patterns
   tmuxscope doctor [--json]           report sessions that break the rules
   tmuxscope repair [--dry-run] [--json]  move stray windows and merge duplicates
+  tmuxscope organize [--hook] [window-id] [--json]  group panes by directory
   tmuxscope hook zsh | tmux          print the glue to install
   tmuxscope -h | --help
   tmuxscope -v | --version
@@ -97,11 +100,15 @@ export function cmdRoute(client: Tmux, path: string, scopes: Scope[], env: Route
   }
   const state = client.state();
   const context = client.paneContext(env.paneId);
-  const routeWindows = state.windows.filter((window) => window.id !== context.windowId);
-  const routeState: TmuxState = { sessions: state.sessions, windows: routeWindows };
+  const targetGroup = directoryGroup(path, scopes);
+  const originGroup = directoryGroup(env.originPath, scopes);
+  const retainOrigin = targetGroup.scope === originGroup.scope;
+  const routeWindows = state.windows.filter((window) => retainOrigin || window.id !== context.windowId);
+  const routePanes = paneRecords(state).filter((pane) => retainOrigin || pane.windowId !== context.windowId);
+  const routeState: TmuxState = { sessions: state.sessions, windows: routeWindows, panes: routePanes };
   const paneWork = client.paneWork(env.paneId);
   const panesInSession = client.panesInSession(context.session);
-  const routeInput: RouteInput = { target: path, originPath: env.originPath, paneWork, panesInSession, scopes, state: routeState };
+  const routeInput: RouteInput = { target: path, originPath: env.originPath, targetGroup, originGroup, paneWork, panesInSession, scopes, state: routeState };
   const plan = routePlan(routeInput);
   if (plan.origin === "restore" && env.cdFile) {
     env.write(env.cdFile, plan.cdPath);
@@ -234,6 +241,36 @@ export function cmdRepair(client: Tmux, scopes: Scope[], dryRun: boolean, json: 
   }
 }
 
+function organizeEnabled(client: Tmux): boolean {
+  const value = client.option ? client.option("@tmuxscope-organize-panes") : "";
+  return value !== "0" && value.toLowerCase() !== "off";
+}
+
+export function cmdOrganize(client: Tmux, scopes: Scope[], hook: boolean, windowId: string, json: boolean) {
+  if (!organizeEnabled(client)) {
+    if (json) {
+      writeJson({ actions: [], applied: false, disabled: true });
+    }
+  } else {
+    const actions = organizePlan(client.state(), scopes, windowId || undefined);
+    if (json) {
+      const failure = applyAll(client, actions);
+      if (failure !== "") {
+        writeJson({ actions, applied: false, error: failure });
+        process.exit(4);
+      }
+      writeJson({ actions, applied: true });
+    } else if (!hook) {
+      const failure = applyAll(client, actions);
+      if (failure !== "") {
+        throw new Error(failure);
+      }
+    } else {
+      applyAll(client, actions);
+    }
+  }
+}
+
 function cmdHook(kind: string) {
   if (kind === "zsh") {
     process.stdout.write(ZSH_HOOK);
@@ -312,6 +349,8 @@ function dispatch(client: Tmux, command: string, positionals: string[], flags: s
     cmdDoctor(client, scopes, flags.includes("--json"));
   } else if (command === "repair") {
     cmdRepair(client, scopes, flags.includes("--dry-run"), flags.includes("--json"));
+  } else if (command === "organize") {
+    cmdOrganize(client, scopes, flags.includes("--hook"), positionals[1] || "", flags.includes("--json"));
   } else if (command === "go") {
     cmdGo(client, positionals[1] || "", scopes);
   } else {

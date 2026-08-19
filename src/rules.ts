@@ -1,4 +1,3 @@
-import { MISC } from "./scopes.ts";
 import type { Scope } from "./scopes.ts";
 import { normalizePattern } from "./resolve.ts";
 
@@ -15,7 +14,7 @@ export function zshRules(scopeName: string, scopes: Scope[]): string[] {
   for (const scope of scopes) {
     for (const pattern of scope.patterns) {
       let sign = "-";
-      if (scope.name === scopeName) {
+      if (scope.name === scopeName && !pattern.includes("*")) {
         sign = "+";
       }
       ranked.push({ length: normalizePattern(pattern).length, rule: `${sign}${zshGlob(pattern)}` });
@@ -23,8 +22,5 @@ export function zshRules(scopeName: string, scopes: Scope[]): string[] {
   }
   ranked.sort((left, right) => right.length - left.length);
   const rules = ranked.map((entry) => entry.rule);
-  if (scopeName === MISC) {
-    rules.push("+*");
-  }
   return rules;
 }

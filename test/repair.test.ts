@@ -23,6 +23,7 @@ const TWO_MIXED: TmuxState = {
     { id: "@4", index: 2, session: "api", path: "/w/api-service/app" },
     { id: "@5", index: 3, session: "api", path: "/w/webapp/src" },
   ],
+  panes: [],
 };
 
 const NAME_COLLISION: TmuxState = {
@@ -32,6 +33,7 @@ const NAME_COLLISION: TmuxState = {
     { id: "@1", index: 2, session: "api", path: "/w/webapp/src" },
     { id: "@2", index: 3, session: "api", path: "/w/api-service" },
   ],
+  panes: [],
 };
 
 const CONTESTED_LOSER: TmuxState = {
@@ -44,6 +46,7 @@ const CONTESTED_LOSER: TmuxState = {
     { id: "@1", index: 1, session: "api", path: "/w/api-service/app" },
     { id: "@2", index: 2, session: "api", path: "/w/webapp" },
   ],
+  panes: [],
 };
 
 const MIXED_BESIDE_CLEAN: TmuxState = {
@@ -58,6 +61,7 @@ const MIXED_BESIDE_CLEAN: TmuxState = {
     { id: "@3", index: 1, session: "main", path: "/home/me/docs" },
     { id: "@4", index: 2, session: "main", path: "/home/me/dl" },
   ],
+  panes: [],
 };
 
 const MIXED_HOLDING_HOME: TmuxState = {
@@ -72,11 +76,13 @@ const MIXED_HOLDING_HOME: TmuxState = {
     { id: "@3", index: 1, session: "main", path: "/home/me/docs" },
     { id: "@4", index: 2, session: "main", path: "/home/me/dl" },
   ],
+  panes: [],
 };
 
 function applyActions(state: TmuxState, actions: Action[]): TmuxState {
   const sessions = state.sessions.map((session) => ({ ...session }));
   const windows = state.windows.map((window) => ({ ...window }));
+  const panes = state.panes.map((pane) => ({ ...pane }));
   let created = 0;
   for (const action of actions) {
     if (action.kind === "new-session") {
@@ -118,11 +124,28 @@ function applyActions(state: TmuxState, actions: Action[]): TmuxState {
         sessions.splice(index, 1);
       }
     }
+    if (action.kind === "move-pane") {
+      const pane = panes.find((entry) => entry.id === action.paneId);
+      if (!pane) {
+        throw new Error(`can't find pane: ${action.paneId}`);
+      }
+      if (!sessions.some((entry) => entry.name === action.session)) {
+        throw new Error(`can't find session: ${action.session}`);
+      }
+      let windowId = action.windowId;
+      if (!windowId) {
+        created = created + 1;
+        windowId = `@p${created}`;
+        windows.push({ id: windowId, index: 1, session: action.session, path: pane.path });
+      }
+      pane.windowId = windowId;
+      pane.session = action.session;
+    }
   }
   for (const session of sessions) {
     session.windows = windows.filter((window) => window.session === session.name).length;
   }
-  return { sessions, windows };
+  return { sessions, windows, panes };
 }
 
 function repair(state: TmuxState): TmuxState {
@@ -242,6 +265,88 @@ test("repair only ever moves windows, it never kills them", () => {
   }
 });
 
+test("repair is a no op after a mixed pane has reached its directory window", () => {
+  const clean: TmuxState = {
+    sessions: [
+      { id: "$0", name: "web", windows: 1, attached: true },
+      { id: "$1", name: "api", windows: 1, attached: false },
+    ],
+    windows: [
+      { id: "@0", index: 1, session: "web", path: "/w/webapp" },
+      { id: "@1", index: 1, session: "api", path: "/w/api-service" },
+    ],
+    panes: [
+      { id: "%0", index: 0, windowId: "@0", session: "web", path: "/w/webapp", active: true },
+      { id: "%1", index: 0, windowId: "@1", session: "api", path: "/w/api-service", active: true },
+    ],
+  };
+  const report = doctorReport(clean, SCOPES);
+  expect(report.mixedPanes).toEqual([]);
+  expect(repairPlan(report, clean, SCOPES).actions).toEqual([]);
+});
+
+test("repair moves a mixed pane and converges on a second pass", () => {
+  const broken: TmuxState = {
+    sessions: [
+      { id: "$0", name: "web", windows: 1, attached: true },
+      { id: "$1", name: "api", windows: 0, attached: false },
+    ],
+    windows: [{ id: "@0", index: 1, session: "web", path: "/w/webapp" }],
+    panes: [
+      { id: "%0", index: 0, windowId: "@0", session: "web", path: "/w/webapp", active: true },
+      { id: "%1", index: 1, windowId: "@0", session: "web", path: "/w/api-service", active: false },
+    ],
+  };
+  const firstReport = doctorReport(broken, SCOPES);
+  const firstActions = repairPlan(firstReport, broken, SCOPES).actions;
+  expect(firstActions).toContainEqual({ kind: "move-pane", paneId: "%1", session: "api" });
+  const after = applyActions(broken, firstActions);
+  expect(doctorReport(after, SCOPES).problems).toBe(0);
+  expect(repairPlan(doctorReport(after, SCOPES), after, SCOPES).actions).toEqual([]);
+});
+
+test("repair joins a mixed pane to an existing matching window", () => {
+  const broken: TmuxState = {
+    sessions: [
+      { id: "$0", name: "web", windows: 1, attached: true },
+      { id: "$1", name: "api", windows: 1, attached: false },
+    ],
+    windows: [
+      { id: "@0", index: 1, session: "web", path: "/w/webapp" },
+      { id: "@1", index: 1, session: "api", path: "/w/api-service" },
+    ],
+    panes: [
+      { id: "%0", index: 0, windowId: "@0", session: "web", path: "/w/webapp", active: true },
+      { id: "%1", index: 1, windowId: "@0", session: "web", path: "/w/api-service", active: false },
+      { id: "%2", index: 0, windowId: "@1", session: "api", path: "/w/api-service", active: true },
+    ],
+  };
+  const actions = repairPlan(doctorReport(broken, SCOPES), broken, SCOPES).actions;
+  expect(actions).toContainEqual({ kind: "move-pane", paneId: "%1", session: "api", windowId: "@1" });
+  const after = applyActions(broken, actions);
+  expect(doctorReport(after, SCOPES).problems).toBe(0);
+});
+
+test("repair reuses a matching window when its session is renamed", () => {
+  const broken: TmuxState = {
+    sessions: [{ id: "$0", name: "work", windows: 2, attached: true }],
+    windows: [
+      { id: "@0", index: 1, session: "work", path: "/w/api-service" },
+      { id: "@1", index: 2, session: "work", path: "/w/webapp" },
+      { id: "@2", index: 3, session: "work", path: "/w/webapp" },
+    ],
+    panes: [
+      { id: "%0", index: 0, windowId: "@0", session: "work", path: "/w/api-service", active: true },
+      { id: "%1", index: 1, windowId: "@0", session: "work", path: "/w/webapp", active: false },
+      { id: "%2", index: 0, windowId: "@1", session: "work", path: "/w/webapp", active: true },
+      { id: "%3", index: 0, windowId: "@2", session: "work", path: "/w/webapp", active: true },
+    ],
+  };
+  const actions = repairPlan(doctorReport(broken, SCOPES), broken, SCOPES).actions;
+  expect(actions).toContainEqual({ kind: "rename-session", id: "$0", name: "web" });
+  expect(actions).toContainEqual({ kind: "move-pane", paneId: "%1", session: "web", windowId: "@1" });
+});
+
 test("a second repair pass is a no op for every fixture", () => {
   const states = [TWO_MIXED, NAME_COLLISION, CONTESTED_LOSER, MIXED_BESIDE_CLEAN, MIXED_HOLDING_HOME];
   for (const state of states) {
@@ -275,7 +380,7 @@ function seeded(seed: number): () => number {
 }
 
 function fuzzState(random: () => number): TmuxState {
-  const state: TmuxState = { sessions: [], windows: [] };
+  const state: TmuxState = { sessions: [], windows: [], panes: [] };
   const pool = NAMES.slice();
   const sessionCount = 1 + Math.floor(random() * 4);
   let windowId = 0;

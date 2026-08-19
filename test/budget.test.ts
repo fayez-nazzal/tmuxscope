@@ -20,6 +20,7 @@ const STATE: TmuxState = {
     { id: "@0", index: 1, session: "api", path: "/w/api-service" },
     { id: "@1", index: 1, session: "web", path: "/w/webapp" },
   ],
+  panes: [],
 };
 
 function countingTmux(): { client: Tmux; calls: () => number } {
