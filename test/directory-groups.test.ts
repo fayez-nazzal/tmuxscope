@@ -1,4 +1,7 @@
 import { expect, test } from "bun:test";
+import { mkdtempSync, mkdirSync, realpathSync, rmSync, symlinkSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { directoryGroup } from "../src/directory-groups.ts";
 import type { Scope } from "../src/scopes.ts";
 
@@ -41,4 +44,22 @@ test("an unmatched path uses its canonical current directory", () => {
     root: "/work/unclaimed/src",
     key: "/work/unclaimed/src",
   });
+});
+
+test("a wildcard group keeps the lexical child when it is a symlink", () => {
+  const directory = mkdtempSync(join(tmpdir(), "tmuxscope-directory-group-"));
+  const target = join(directory, "target");
+  const link = join(directory, "feos.link");
+  mkdirSync(join(target, "src"), { recursive: true });
+  symlinkSync(target, link);
+  try {
+    const canonicalTarget = realpathSync(target);
+    expect(directoryGroup(join(link, "src"), [{ name: "feos", patterns: [`${directory}/feos*`] }])).toEqual({
+      scope: "feos",
+      root: canonicalTarget,
+      key: canonicalTarget,
+    });
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });

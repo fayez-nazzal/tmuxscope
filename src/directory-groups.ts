@@ -1,4 +1,4 @@
-import { join, relative } from "node:path";
+import { join, relative, resolve as resolvePath } from "node:path";
 import type { Scope } from "./scopes.ts";
 import { canonical, normalizePattern, resolveScope } from "./resolve.ts";
 
@@ -8,9 +8,19 @@ function wildcardRoot(path: string, pattern: string): string {
   const normalized = normalizePattern(pattern);
   const parentEnd = normalized.lastIndexOf("/");
   const parentPattern = parentEnd === -1 ? "." : normalized.slice(0, parentEnd);
-  const parent = canonical(parentPattern);
-  const child = relative(parent, canonical(path)).split("/")[0];
-  return canonical(join(parent, child));
+  const lexicalParent = resolvePath(parentPattern);
+  const lexicalChild = relative(lexicalParent, resolvePath(path)).split("/")[0];
+  let root = canonical(path);
+  if (lexicalChild && lexicalChild !== ".." && !lexicalChild.startsWith("../")) {
+    root = canonical(join(lexicalParent, lexicalChild));
+  } else {
+    const canonicalParent = canonical(parentPattern);
+    const canonicalChild = relative(canonicalParent, canonical(path)).split("/")[0];
+    if (canonicalChild && canonicalChild !== ".." && !canonicalChild.startsWith("../")) {
+      root = canonical(join(canonicalParent, canonicalChild));
+    }
+  }
+  return root;
 }
 
 export function directoryGroup(path: string, scopes: Scope[]): DirectoryGroup {
