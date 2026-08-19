@@ -20,11 +20,13 @@ test("a real cd through the real hook and binary lands the pane right and leaves
   const root = realpathSync(mkdtempSync(join(tmpdir(), "tmuxscope-live-")));
   const fakeHome = realpathSync(mkdtempSync(join(tmpdir(), "tmuxscope-live-home-")));
   const work = join(root, "work");
+  const worktree = join(root, "work.fix");
   const elsewhere = join(root, "elsewhere");
   mkdirSync(work);
+  mkdirSync(worktree);
   mkdirSync(elsewhere);
   const config = join(root, "scopes.conf");
-  writeFileSync(config, `work = ${work}\n`);
+  writeFileSync(config, `work = ${join(root, "work*")}\n`);
   const socket = join(root, "tmux.sock");
   const bin = join(root, "bin");
   mkdirSync(bin);
@@ -44,20 +46,33 @@ test("a real cd through the real hook and binary lands the pane right and leaves
 
     const pane = run(socket, ["list-panes", "-t", "seed", "-F", "#{pane_id}"]);
     Bun.spawnSync(["tmux", "-S", socket, "send-keys", "-t", pane, `source ${hookFile}`, "Enter"], { env });
-    Bun.spawnSync(["tmux", "-S", socket, "send-keys", "-t", pane, `cd ${elsewhere}`, "Enter"], { env });
+    Bun.spawnSync(["tmux", "-S", socket, "send-keys", "-t", pane, `cd ${worktree}`, "Enter"], { env });
 
     const deadline = Date.now() + 15000;
     let windows: string[] = [];
-    let landed = false;
-    while (Date.now() < deadline && !landed) {
+    let worktreeLanded = false;
+    while (Date.now() < deadline && !worktreeLanded) {
       windows = run(socket, ["list-windows", "-a", "-F", "#{session_name} #{pane_current_path}"]).split("\n");
-      landed = windows.includes(`misc ${elsewhere}`) && windows.includes(`seed ${work}`);
-      if (!landed) {
+      worktreeLanded = windows.includes(`seed ${work}`) && windows.includes(`seed ${worktree}`);
+      if (!worktreeLanded) {
+        Bun.sleepSync(50);
+      }
+    }
+    expect(windows).toContain(`seed ${work}`);
+    expect(windows).toContain(`seed ${worktree}`);
+
+    Bun.spawnSync(["tmux", "-S", socket, "send-keys", "-t", pane, `cd ${elsewhere}`, "Enter"], { env });
+    let elsewhereLanded = false;
+    while (Date.now() < deadline && !elsewhereLanded) {
+      windows = run(socket, ["list-windows", "-a", "-F", "#{session_name} #{pane_current_path}"]).split("\n");
+      elsewhereLanded = windows.includes(`misc ${elsewhere}`);
+      if (!elsewhereLanded) {
         Bun.sleepSync(50);
       }
     }
     expect(windows).toContain(`misc ${elsewhere}`);
     expect(windows).toContain(`seed ${work}`);
+    expect(windows).toContain(`seed ${worktree}`);
 
     const pid = run(socket, ["display-message", "-p", "#{pid}"]);
     const doctor = Bun.spawnSync(["bun", CLI, "doctor"], { env: { ...env, TMUX: `${socket},${pid},0` } });

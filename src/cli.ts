@@ -14,6 +14,7 @@ import { repairPlan } from "./repair.ts";
 import type { RepairResult } from "./repair.ts";
 import { routePlan } from "./route.ts";
 import type { RouteInput } from "./route.ts";
+import { directoryGroup } from "./directory-groups.ts";
 import { renderAction, renderConfigReport, renderDoctor, renderList } from "./render.ts";
 import { goTarget } from "./go.ts";
 import type { GoTarget, PathProbe } from "./go.ts";
@@ -97,11 +98,15 @@ export function cmdRoute(client: Tmux, path: string, scopes: Scope[], env: Route
   }
   const state = client.state();
   const context = client.paneContext(env.paneId);
-  const routeWindows = state.windows.filter((window) => window.id !== context.windowId);
-  const routeState: TmuxState = { sessions: state.sessions, windows: routeWindows, panes: paneRecords(state).filter((pane) => pane.windowId !== context.windowId) };
+  const targetGroup = directoryGroup(path, scopes);
+  const originGroup = directoryGroup(env.originPath, scopes);
+  const retainOrigin = targetGroup.scope === originGroup.scope;
+  const routeWindows = state.windows.filter((window) => retainOrigin || window.id !== context.windowId);
+  const routePanes = paneRecords(state).filter((pane) => retainOrigin || pane.windowId !== context.windowId);
+  const routeState: TmuxState = { sessions: state.sessions, windows: routeWindows, panes: routePanes };
   const paneWork = client.paneWork(env.paneId);
   const panesInSession = client.panesInSession(context.session);
-  const routeInput: RouteInput = { target: path, originPath: env.originPath, paneWork, panesInSession, scopes, state: routeState };
+  const routeInput: RouteInput = { target: path, originPath: env.originPath, targetGroup, originGroup, paneWork, panesInSession, scopes, state: routeState };
   const plan = routePlan(routeInput);
   if (plan.origin === "restore" && env.cdFile) {
     env.write(env.cdFile, plan.cdPath);

@@ -1,11 +1,14 @@
 import type { Scope } from "./scopes.ts";
-import { canonical, resolveScope } from "./resolve.ts";
+import { directoryGroup } from "./directory-groups.ts";
+import type { DirectoryGroup } from "./directory-groups.ts";
 import { sessionForScope } from "./ownership.ts";
 import type { Action, TmuxState } from "./tmux.ts";
 
 export type RouteInput = {
   target: string;
   originPath: string;
+  targetGroup: DirectoryGroup;
+  originGroup: DirectoryGroup;
   paneWork: number;
   panesInSession: number;
   scopes: Scope[];
@@ -19,10 +22,15 @@ export type RoutePlan = {
   message: string;
 };
 
-function idleWindow(state: TmuxState, session: string, target: string): string | null {
+function idleWindow(state: TmuxState, session: string, targetGroup: DirectoryGroup, scopes: Scope[]): string | null {
   let found: string | null = null;
-  const wanted = canonical(target);
-  const match = state.windows.find((window) => window.session === session && canonical(window.path) === wanted);
+  const match = state.windows.find((window) => {
+    let paths = state.panes.filter((pane) => pane.windowId === window.id).map((pane) => pane.path);
+    if (paths.length === 0) {
+      paths = [window.path];
+    }
+    return window.session === session && paths.every((path) => directoryGroup(path, scopes).key === targetGroup.key);
+  });
   if (match) {
     found = match.id;
   }
@@ -31,15 +39,13 @@ function idleWindow(state: TmuxState, session: string, target: string): string |
 
 export function routePlan(input: RouteInput): RoutePlan {
   const plan: RoutePlan = { actions: [], origin: "none", cdPath: "", message: "" };
-  const target = resolveScope(input.target, input.scopes).scope;
-  const current = resolveScope(input.originPath, input.scopes).scope;
-  if (target !== current) {
-    const existing = sessionForScope(input.state, input.scopes, target);
-    let session = target;
+  if (input.targetGroup.key !== input.originGroup.key) {
+    const existing = sessionForScope(input.state, input.scopes, input.targetGroup.scope);
+    let session = input.targetGroup.scope;
     let reused = false;
     if (existing) {
       session = existing;
-      const idle = idleWindow(input.state, session, input.target);
+      const idle = idleWindow(input.state, session, input.targetGroup, input.scopes);
       if (idle) {
         reused = true;
         plan.actions.push({ kind: "select-window", windowId: idle });
