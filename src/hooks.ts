@@ -53,9 +53,9 @@ _tmuxscope_init
 export const TMUX_ADOPT_COMMAND = "tmuxscope adopt '#{session_id}'";
 
 const TMUX_HOME = homedir().replaceAll("|", "\\|");
-const TMUX_PANE_PATH = `#{?#{!=:#{@tmuxscope-pane-path},0},#{s|^${TMUX_HOME}|~|:pane_current_path},}`;
+const TMUX_PANE_PATH = `#{?#{&&:#{!=:#{@tmuxscope-pane-path},0},#{!=:#{@tmuxscope-pane-path},off}},#{s|^${TMUX_HOME}|~|:pane_current_path},}`;
 const TMUX_PANE_PATH_FORMAT = ` #[fg=colour245]${TMUX_PANE_PATH}#[default]`;
-const TMUX_ORGANIZE_HOOK = `if-shell -F "#{!=:#{@tmuxscope-organize-panes},0}" "run-shell 'tmuxscope organize --hook'"`;
+const TMUX_ORGANIZE_HOOK = `if-shell -F "#{&&:#{!=:#{@tmuxscope-organize-panes},0},#{!=:#{@tmuxscope-organize-panes},off}}" "run-shell 'tmuxscope organize --hook #{window_id}'"`;
 const TMUX_PATH_HOOK = `if-shell -F "#{!=:#{@tmuxscope-pane-path-installed},1}" "set-option -g pane-border-status top \\; set-option -ag pane-border-format '${TMUX_PANE_PATH_FORMAT}' \\; set-option -g @tmuxscope-pane-path-installed 1"`;
 
 export const TMUX_HOOK = `set-hook -g session-created "run-shell \\"${TMUX_ADOPT_COMMAND}\\""

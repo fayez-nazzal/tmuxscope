@@ -26,6 +26,7 @@ export interface Tmux {
   paneContext(paneId: string): PaneContext;
   apply(action: Action): void;
   message(text: string): void;
+  option?(name: string): string;
 }
 
 export function parsePaneContext(text: string): PaneContext {
@@ -198,6 +199,9 @@ export const tmux: Tmux = {
   },
   message(text: string) {
     run(["display-message", text]);
+  },
+  option(name: string): string {
+    return run(["show-options", "-gqv", name]).trim();
   },
 };
 

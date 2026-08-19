@@ -40,6 +40,11 @@ test("the tmux hook treats unset organization and path switches as enabled", () 
   expect(TMUX_HOOK).toContain("#{!=:#{@tmuxscope-pane-path},0}");
 });
 
+test("the tmux hook treats off organization and path switches as disabled", () => {
+  expect(TMUX_HOOK).toContain("#{!=:#{@tmuxscope-organize-panes},off}");
+  expect(TMUX_HOOK).toContain("#{!=:#{@tmuxscope-pane-path},off}");
+});
+
 test("the tmux hook appends an idempotent home-relative pane path fragment", () => {
   expect(TMUX_HOOK).toContain("pane-border-format");
   expect(TMUX_HOOK).toContain("pane-border-status top");
