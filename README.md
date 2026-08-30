@@ -9,11 +9,13 @@ the window you left open.
 The whole idea is one rule.
 
 - One tmux session per scope.
-- One scope per directory.
+- One scope per set of related directories.
+- One directory group per tmux window.
 
-A **scope** is a name plus the paths it owns, like `web = ~/code/webapp`. Every
-directory belongs to exactly one scope. Anything you did not claim belongs to a
-built-in scope called `misc`.
+A **scope** is a name plus the paths it owns, like `web = ~/code/webapp`. A
+scope can own several directories, including several git worktrees. Every
+directory group gets its own window inside the scope session. Anything you did
+not claim belongs to a built-in scope called `misc`.
 
 Real work drifts away from that rule. You open a session by hand, or a `cd`
 drops a window in the wrong place. Two commands put it back.
@@ -66,6 +68,15 @@ Add the two hooks.
 
 Open a new shell, or run `source ~/.zshrc` and `tmux source ~/.tmux.conf`.
 
+The tmux hook keeps panes from different directory groups in separate windows.
+It also adds the home-relative directory to the pane header. Both behaviors are
+enabled by default and can be disabled independently with the tmux options
+`@tmuxscope-organize-panes` and `@tmuxscope-pane-path`. Existing pane labels and
+badges remain in place.
+
+For this repository, add the local scope line `tmuxscope = ~/repos/tools/tmuxscope`
+to your scopes file.
+
 ## The smallest useful command
 
     tmuxscope list
@@ -113,6 +124,7 @@ beats a line for every directory you own.
     tmuxscope list [--json]             every scope, its session and its patterns
     tmuxscope doctor [--json]           report sessions that break the rules
     tmuxscope repair [--dry-run] [--json]  move stray windows and merge duplicates
+    tmuxscope organize [--hook] [window-id] [--json]  group panes by directory
     tmuxscope hook zsh | tmux           print the glue to install
 
 `go` also takes a path, so `tmuxscope go ~/code/webapp` works without you
@@ -125,6 +137,8 @@ nothing. `repair` then acts only on the sessions `doctor` named.
 
 - `--json` prints machine readable output. It works on `resolve`, `list`, `doctor` and `repair`.
 - `--dry-run` on `repair` prints the plan and changes nothing.
+- `organize` moves only panes in mixed-directory windows. `--hook` keeps the
+  command quiet for tmux hooks. A window id limits the check to that window.
 - `-h` or `--help` prints the usage text.
 - `-v` or `--version` prints the version from `package.json`.
 

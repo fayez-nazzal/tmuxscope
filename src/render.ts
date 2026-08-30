@@ -63,6 +63,13 @@ export function renderDoctor(report: Report): string {
       lines.push(`ambiguous session ${ambiguous.session} splits evenly, ${ambiguous.count} windows each, between ${ambiguous.candidates.join(" and ")}`);
       lines.push(`  tie broken by ${ambiguous.rule}`);
     }
+    for (const mixed of report.mixedPanes) {
+      lines.push("");
+      lines.push(`mixed window ${mixed.windowId} contains panes from multiple directories`);
+      for (const pane of mixed.panes) {
+        lines.push(`  pane ${pane.id}  ${pane.group}`);
+      }
+    }
     lines.push("");
     lines.push("run tmuxscope repair to fix");
   }
@@ -108,6 +115,9 @@ export function renderAction(action: Action): string {
   }
   if (action.kind === "move-window") {
     text = `move-window ${action.windowId} to ${action.session}`;
+  }
+  if (action.kind === "move-pane") {
+    text = `move-pane ${action.paneId} to ${action.session}`;
   }
   if (action.kind === "rename-session") {
     text = `rename-session ${action.id} to ${action.name}`;

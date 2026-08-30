@@ -70,10 +70,11 @@ test("rules prints one zsh fast path rule per line for the scope owning a path",
   expect(run(["rules", `${HOME}/webapp`], config).out).toBe(`+${HOME}/webapp(|/*)`);
 });
 
-test("rules for an unscoped path ends with a catch all so misc stays cheap", () => {
+test("rules for an unscoped path leave routing enabled", () => {
   const config = configFile("web = ~/webapp\n");
   const lines = run(["rules", `${HOME}/Downloads`], config).out.split("\n");
-  expect(lines).toEqual([`-${HOME}/webapp(|/*)`, "+*"]);
+  expect(lines).toEqual([`-${HOME}/webapp(|/*)`]);
+  expect(lines.filter((line) => line.startsWith("+"))).toEqual([]);
 });
 
 test("a broken config exits 2 and names the line", () => {

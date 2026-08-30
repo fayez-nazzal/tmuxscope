@@ -92,17 +92,24 @@ test("zshRules puts the longest pattern first and marks the owning scope with a 
   expect(rules).toContain(`+${HOME}/code(|/*)`);
 });
 
-test("zshRules gives misc a catch all so an unscoped cd never spawns the cli", () => {
+test("zshRules routes unmatched directories so each directory can be its own group", () => {
   const rules = zshRules("misc", SCOPES);
-  expect(rules[rules.length - 1]).toBe("+*");
-  expect(rules.filter((rule) => rule.startsWith("+"))).toEqual(["+*"]);
+  expect(rules.filter((rule) => rule.startsWith("+"))).toEqual([]);
+  expect(fastPath("misc", ["/tmp/unmatched-one", "/tmp/unmatched-two"], SCOPES)).toEqual(["leave", "leave"]);
 });
 
-test("the zsh fast path leaves a parent scope for a nested worktree, like resolveScope does", () => {
+test("wildcard scope rules route between worktrees", () => {
+  const scopes: Scope[] = [{ name: "work", patterns: ["/tmp/work*"] }];
+  const rules = zshRules("work", scopes);
+  expect(rules).toEqual(["-/tmp/work[^/]#(|/*)"]);
+  expect(fastPath("work", ["/tmp/work.fix", "/tmp/work.other"], scopes)).toEqual(["leave", "leave"]);
+});
+
+test("the zsh fast path routes a parent scope for a nested worktree", () => {
   const nested = `${HOME}/code/api-service.tasks-11090/src`;
   expect(resolveScope(nested, SCOPES).scope).toBe("api");
   expect(fastPath("code", [nested], SCOPES)).toEqual(["leave"]);
-  expect(fastPath("api", [nested], SCOPES)).toEqual(["stay"]);
+  expect(fastPath("api", [nested], SCOPES)).toEqual(["leave"]);
 });
 
 test("the zsh fast path agrees with resolveScope for every scope and path", () => {
@@ -111,7 +118,8 @@ test("the zsh fast path agrees with resolveScope for every scope and path", () =
     const verdicts = fastPath(scopeName, PATHS, SCOPES);
     const expected = PATHS.map((path) => {
       let verdict = "leave";
-      if (resolveScope(path, SCOPES).scope === scopeName) {
+      const resolution = resolveScope(path, SCOPES);
+      if (resolution.scope === scopeName && resolution.matched && !resolution.matched.includes("*")) {
         verdict = "stay";
       }
       return verdict;

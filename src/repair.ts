@@ -1,7 +1,9 @@
 import type { Scope } from "./scopes.ts";
 import { resolveScope } from "./resolve.ts";
+import { directoryGroup } from "./directory-groups.ts";
 import { ascendingName, majorityForSession } from "./ownership.ts";
 import type { Report } from "./doctor.ts";
+import { paneRecords } from "./tmux.ts";
 import type { Action, SessionInfo, TmuxState } from "./tmux.ts";
 
 type Destination = { id: string; name: string };
@@ -19,6 +21,36 @@ function reportedNames(report: Report): Set<string> {
     }
   }
   return names;
+}
+
+function mixedPaneWindowIds(report: Report): Set<string> {
+  return new Set(report.mixedPanes.map((mixed) => mixed.windowId));
+}
+
+function windowMatchesGroup(windowId: string, group: string, state: TmuxState, scopes: Scope[]): boolean {
+  const window = state.windows.find((entry) => entry.id === windowId);
+  let result = false;
+  if (window) {
+    const panes = paneRecords(state).filter((pane) => pane.windowId === windowId);
+    const paths = panes.length > 0 ? panes.map((pane) => pane.path) : [window.path];
+    result = paths.every((path) => directoryGroup(path, scopes).key === group);
+  }
+  return result;
+}
+
+function destinationWindow(destination: Destination, group: string, sourceWindowId: string, state: TmuxState, scopes: Scope[]): string | null {
+  let result: string | null = null;
+  const current = state.sessions.find((session) => session.id === destination.id);
+  const names = new Set([destination.name]);
+  if (current) {
+    names.add(current.name);
+  }
+  for (const window of state.windows) {
+    if (result === null && names.has(window.session) && window.id !== sourceWindowId && windowMatchesGroup(window.id, group, state, scopes)) {
+      result = window.id;
+    }
+  }
+  return result;
 }
 
 function ownerRank(session: SessionInfo, scope: string): number {
@@ -141,10 +173,27 @@ function orderedMoves(moves: Move[], counts: Map<string, number>): Ordering {
 
 function buildRepair(report: Report, state: TmuxState, scopes: Scope[], reuseDrained: boolean): Ordering {
   const reported = reportedNames(report);
-  const strays = state.windows.filter((window) => reported.has(window.session));
+  const mixedWindows = mixedPaneWindowIds(report);
+  const panes = paneRecords(state);
+  for (const window of state.windows) {
+    if (mixedWindows.has(window.id)) {
+      reported.add(window.session);
+    }
+  }
+  const reportedStrays = state.windows.filter((window) => reported.has(window.session));
   const strayScopes = new Set<string>();
-  for (const window of strays) {
+  for (const window of reportedStrays) {
     strayScopes.add(resolveScope(window.path, scopes).scope);
+  }
+  for (const pane of panes) {
+    if (mixedWindows.has(pane.windowId)) {
+      strayScopes.add(directoryGroup(pane.path, scopes).scope);
+      const scope = directoryGroup(pane.path, scopes).scope;
+      const named = state.sessions.find((session) => session.name === scope);
+      if (named) {
+        reported.add(named.name);
+      }
+    }
   }
   const orderedScopes = [...strayScopes].sort(ascendingName);
   const owners = new Map<string, SessionInfo>();
@@ -159,7 +208,13 @@ function buildRepair(report: Report, state: TmuxState, scopes: Scope[], reuseDra
       claimed.add(owner.id);
       owners.set(scope, owner);
     } else {
-      const paths = strays.filter((window) => resolveScope(window.path, scopes).scope === scope).map((window) => window.path);
+      const paths = reportedStrays.filter((window) => resolveScope(window.path, scopes).scope === scope).map((window) => window.path);
+      for (const pane of panes) {
+        const paneScope = directoryGroup(pane.path, scopes).scope;
+        if (mixedWindows.has(pane.windowId) && paneScope === scope) {
+          paths.push(pane.path);
+        }
+      }
       const lowestPath = paths.slice().sort(ascendingName)[0]!;
       creations.set(scope, lowestPath);
     }
@@ -189,7 +244,7 @@ function buildRepair(report: Report, state: TmuxState, scopes: Scope[], reuseDra
     actions.push({ kind: "new-session", name, cwd });
   }
   const moves: Move[] = [];
-  for (const window of strays) {
+  for (const window of reportedStrays) {
     const scope = resolveScope(window.path, scopes).scope;
     const destination = destinations.get(scope);
     const holder = state.sessions.find((session) => session.name === window.session);
@@ -199,6 +254,24 @@ function buildRepair(report: Report, state: TmuxState, scopes: Scope[], reuseDra
   }
   const ordering = orderedMoves(moves, counts);
   let combinedActions: Action[] = [...actions, ...ordering.actions];
+  if (!ordering.stuck) {
+    for (const pane of panes) {
+      const window = state.windows.find((entry) => entry.id === pane.windowId);
+      if (window && mixedWindows.has(window.id)) {
+        const windowGroup = directoryGroup(window.path, scopes).key;
+        const paneGroup = directoryGroup(pane.path, scopes);
+        const destination = destinations.get(paneGroup.scope);
+        if (destination && paneGroup.key !== windowGroup) {
+          const targetWindow = destinationWindow(destination, paneGroup.key, window.id, state, scopes);
+          if (targetWindow) {
+            combinedActions.push({ kind: "move-pane", paneId: pane.id, session: destination.name, windowId: targetWindow });
+          } else {
+            combinedActions.push({ kind: "move-pane", paneId: pane.id, session: destination.name });
+          }
+        }
+      }
+    }
+  }
   if (ordering.stuck) {
     combinedActions = [];
   }
