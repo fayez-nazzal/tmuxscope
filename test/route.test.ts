@@ -83,7 +83,7 @@ test("two worktrees in one scope use separate windows", () => {
     originGroup: directoryGroup("/w/other", scopes),
   });
   expect(plan.actions).toEqual([
-    { kind: "new-window", session: "feos", cwd: target },
+    { kind: "new-window", session: "feos", cwd: target, name: "feos.other" },
     { kind: "switch", target: "feos" },
   ]);
 });
@@ -103,7 +103,7 @@ test("same-scope routing never reuses the origin window", () => {
     originGroup: directoryGroup("/w/feos.fix", scopes),
   });
   expect(plan.actions).toEqual([
-    { kind: "new-window", session: "feos", cwd: target },
+    { kind: "new-window", session: "feos", cwd: target, name: "feos.other" },
     { kind: "switch", target: "feos" },
   ]);
 });

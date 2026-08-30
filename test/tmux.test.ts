@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { spawnSync as realSpawnSync } from "node:child_process";
-import { commandFor, FIELD, legacyPanes, parsePaneContext, parsePanes, parseSessions, parseWindows, setTmuxSpawn, tmux } from "../src/tmux.ts";
+import { commandFor, FIELD, legacyPanes, paneRecords, parsePaneContext, parsePanes, parseSessions, parseWindows, setTmuxSpawn, tmux } from "../src/tmux.ts";
 import type { TmuxState } from "../src/tmux.ts";
 
 test("parseSessions reads id, name, window count and attached flag", () => {
@@ -25,6 +25,25 @@ test("parsePanes reads pane identity, window, session, path and active state", (
   ]);
 });
 
+test("parsePanes marks ignored auxiliary panes", () => {
+  const text = `%1${FIELD}0${FIELD}@4${FIELD}api${FIELD}/Users/x/code/api-service${FIELD}1${FIELD}1\n`;
+  expect(parsePanes(text)).toEqual([
+    { id: "%1", index: 0, windowId: "@4", session: "api", path: "/Users/x/code/api-service", active: true, ignored: true },
+  ]);
+});
+
+test("paneRecords excludes ignored auxiliary panes", () => {
+  const state: TmuxState = {
+    sessions: [],
+    windows: [{ id: "@4", index: 2, session: "api", path: "/Users/x/code/api-service" }],
+    panes: [
+      { id: "%1", index: 0, windowId: "@4", session: "api", path: "/Users/x/code/api-service", active: true },
+      { id: "%2", index: 1, windowId: "@4", session: "api", path: "/tmp/header", active: false, ignored: true },
+    ],
+  };
+  expect(paneRecords(state).map((pane) => pane.id)).toEqual(["%1"]);
+});
+
 test("legacyPanes synthesizes one active pane for each window fixture", () => {
   const state: TmuxState = {
     sessions: [],
@@ -43,8 +62,8 @@ test("commandFor builds a new session command", () => {
 });
 
 test("commandFor builds a new window command", () => {
-  expect(commandFor({ kind: "new-window", session: "web", cwd: "/Users/x/webapp/app" })).toEqual([
-    "new-window", "-t", "web:", "-c", "/Users/x/webapp/app",
+  expect(commandFor({ kind: "new-window", session: "web", cwd: "/Users/x/webapp/app", name: "app" })).toEqual([
+    "new-window", "-t", "web:", "-n", "app", "-c", "/Users/x/webapp/app",
   ]);
 });
 

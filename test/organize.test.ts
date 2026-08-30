@@ -81,6 +81,19 @@ test("mixed destination windows are not reused", () => {
   expect(applied).toEqual([{ kind: "move-pane", paneId: "%1", session: "api" }]);
 });
 
+test("ignored auxiliary panes are untouched", () => {
+  const state: TmuxState = {
+    ...MIXED,
+    panes: [
+      ...MIXED.panes,
+      { id: "%6", index: 2, windowId: "@0", session: "web", path: "/w/api-service", active: false, ignored: true },
+    ],
+  };
+  const applied: Action[] = [];
+  cmdOrganize(client(state, applied), SCOPES, false, "@0", false);
+  expect(applied).toEqual([{ kind: "move-pane", paneId: "%1", session: "api", windowId: "@1" }]);
+});
+
 test("zero and off disable organization", () => {
   for (const setting of ["0", "off"]) {
     const applied: Action[] = [];

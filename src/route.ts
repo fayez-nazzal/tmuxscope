@@ -1,7 +1,9 @@
+import { basename } from "node:path";
 import type { Scope } from "./scopes.ts";
 import { directoryGroup } from "./directory-groups.ts";
 import type { DirectoryGroup } from "./directory-groups.ts";
 import { sessionForScope } from "./ownership.ts";
+import { paneRecords } from "./tmux.ts";
 import type { Action, TmuxState } from "./tmux.ts";
 
 export type RouteInput = {
@@ -29,7 +31,7 @@ function idleWindow(state: TmuxState, session: string, targetGroup: DirectoryGro
     if (window.id === originWindowId) {
       return false;
     }
-    let paths = state.panes.filter((pane) => pane.windowId === window.id).map((pane) => pane.path);
+    let paths = paneRecords(state).filter((pane) => pane.windowId === window.id).map((pane) => pane.path);
     if (paths.length === 0) {
       paths = [window.path];
     }
@@ -54,7 +56,7 @@ export function routePlan(input: RouteInput): RoutePlan {
         reused = true;
         plan.actions.push({ kind: "select-window", windowId: idle });
       } else {
-        plan.actions.push({ kind: "new-window", session, cwd: input.target });
+        plan.actions.push({ kind: "new-window", session, cwd: input.target, name: basename(input.targetGroup.root) });
       }
     } else {
       plan.actions.push({ kind: "new-session", name: session, cwd: input.target });

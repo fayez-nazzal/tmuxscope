@@ -6,13 +6,13 @@ export const FIELD = "\u001f";
 
 export type SessionInfo = { id: string; name: string; windows: number; attached: boolean };
 export type WindowInfo = { id: string; index: number; session: string; path: string };
-export type PaneInfo = { id: string; index: number; windowId: string; session: string; path: string; active: boolean };
+export type PaneInfo = { id: string; index: number; windowId: string; session: string; path: string; active: boolean; ignored?: boolean };
 export type TmuxState = { sessions: SessionInfo[]; windows: WindowInfo[]; panes: PaneInfo[] };
 export type PaneContext = { session: string; windowId: string };
 
 export type Action =
   | { kind: "new-session"; name: string; cwd: string }
-  | { kind: "new-window"; session: string; cwd: string }
+  | { kind: "new-window"; session: string; cwd: string; name?: string }
   | { kind: "switch"; target: string }
   | { kind: "move-window"; windowId: string; session: string }
   | { kind: "move-pane"; paneId: string; session: string; windowId?: string }
@@ -82,7 +82,8 @@ export function parsePanes(text: string): PaneInfo[] {
         const session = parts[3];
         const path = parts[4];
         const active = parts[5] === "1";
-        panes.push({ id, index, windowId, session, path, active });
+        const ignored = parts[6] === "1";
+        panes.push({ id, index, windowId, session, path, active, ...(ignored ? { ignored: true } : {}) });
       }
     }
   }
@@ -109,7 +110,7 @@ export function paneRecords(state: Pick<TmuxState, "windows"> & { panes?: PaneIn
   } else {
     panes = legacyPanes(state);
   }
-  return panes;
+  return panes.filter((pane) => pane.ignored !== true);
 }
 
 export function commandFor(action: Action): string[] {
@@ -118,7 +119,11 @@ export function commandFor(action: Action): string[] {
     command = ["new-session", "-d", "-s", action.name, "-c", action.cwd];
   }
   if (action.kind === "new-window") {
-    command = ["new-window", "-t", `${action.session}:`, "-c", action.cwd];
+    command = ["new-window", "-t", `${action.session}:`];
+    if (action.name) {
+      command.push("-n", action.name);
+    }
+    command.push("-c", action.cwd);
   }
   if (action.kind === "switch") {
     command = ["switch-client", "-t", action.target];
@@ -173,14 +178,14 @@ export const tmux: Tmux = {
   state(): TmuxState {
     const sessions = parseSessions(run(["list-sessions", "-F", `#{session_id}${FIELD}#{session_name}${FIELD}#{session_windows}${FIELD}#{session_attached}`]));
     const windows = parseWindows(run(["list-windows", "-a", "-F", `#{window_id}${FIELD}#{window_index}${FIELD}#{session_name}${FIELD}#{pane_current_path}`]));
-    const panes = parsePanes(run(["list-panes", "-a", "-F", `#{pane_id}${FIELD}#{pane_index}${FIELD}#{window_id}${FIELD}#{session_name}${FIELD}#{pane_current_path}${FIELD}#{pane_active}`]));
+    const panes = parsePanes(run(["list-panes", "-a", "-F", `#{pane_id}${FIELD}#{pane_index}${FIELD}#{window_id}${FIELD}#{session_name}${FIELD}#{pane_current_path}${FIELD}#{pane_active}${FIELD}#{@tmuxscope_ignore}`]));
     return { sessions, windows, panes };
   },
   paneWork(paneId: string): number {
     return Number(run(["show-options", "-pqv", "-t", paneId, "@tmuxscope_work"]).trim() || "0");
   },
   panesInSession(session: string): number {
-    return run(["list-panes", "-s", "-t", session, "-F", "#{pane_id}"]).split("\n").filter((line) => line.length > 0).length;
+    return run(["list-panes", "-s", "-t", session, "-F", `#{pane_id}${FIELD}#{@tmuxscope_ignore}`]).split("\n").filter((line) => line.length > 0 && line.split(FIELD)[1] !== "1").length;
   },
   paneContext(paneId: string): PaneContext {
     return parsePaneContext(run(["display-message", "-p", "-t", paneId, `#{session_name}${FIELD}#{window_id}`]));
