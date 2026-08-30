@@ -46,6 +46,10 @@ test("a real cd through the real hook and binary lands the pane right and leaves
 
     const pane = run(socket, ["list-panes", "-t", "seed", "-F", "#{pane_id}"]);
     Bun.spawnSync(["tmux", "-S", socket, "send-keys", "-t", pane, `source ${hookFile}`, "Enter"], { env });
+    Bun.sleepSync(100);
+    Bun.spawnSync(["tmux", "-S", socket, "send-keys", "-t", pane, "printf seeded", "Enter"], { env });
+    Bun.sleepSync(100);
+    Bun.spawnSync(["tmux", "-S", socket, "set-option", "-p", "-t", pane, "@tmuxscope_work", "1"], { env });
     Bun.spawnSync(["tmux", "-S", socket, "send-keys", "-t", pane, `cd ${worktree}`, "Enter"], { env });
 
     const deadline = Date.now() + 15000;

@@ -44,6 +44,19 @@ test("paneRecords excludes ignored auxiliary panes", () => {
   expect(paneRecords(state).map((pane) => pane.id)).toEqual(["%1"]);
 });
 
+test("panesInSession excludes ignored auxiliary panes", () => {
+  setTmuxSpawn(((file, args) => {
+    expect(file).toBe("tmux");
+    expect(args[0]).toBe("list-panes");
+    return { status: 0, stdout: `%1${FIELD}1\n%2${FIELD}\n`, stderr: "" } as any;
+  }) as typeof realSpawnSync);
+  try {
+    expect(tmux.panesInSession("api")).toBe(1);
+  } finally {
+    setTmuxSpawn(realSpawnSync);
+  }
+});
+
 test("legacyPanes synthesizes one active pane for each window fixture", () => {
   const state: TmuxState = {
     sessions: [],

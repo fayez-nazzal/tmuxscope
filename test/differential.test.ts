@@ -156,6 +156,9 @@ test("the zsh fast path agrees with the binary, or errs safe (leave, not stay), 
           } else {
             dangerousMismatches.push(description);
           }
+        } else if (isSymlinkOnlyMatch(candidate, binaryScope, scopes)) {
+          const description = `anchor=${anchor} candidate=${candidate} zsh=${zshVerdict} binary=${binaryVerdict}`;
+          knownSymlinkGap.push(description);
         }
       }
     }
