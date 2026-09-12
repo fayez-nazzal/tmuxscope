@@ -79,7 +79,7 @@ export function renderDoctor(report: Report): string {
 function renderFinding(finding: ConfigFinding): string {
   let text = "";
   if (finding.kind === "ambiguousLength") {
-    text = `ambiguous length ${finding.length}: ${finding.scopes.join(", ")} have equal-length patterns, config order breaks the tie`;
+    text = `ambiguous length ${finding.length}: ${finding.scopes.join(", ")} have overlapping equal-length patterns`;
   }
   if (finding.kind === "missingDirectory") {
     text = `missing directory: scope ${finding.scope} pattern ${finding.pattern} does not exist`;
