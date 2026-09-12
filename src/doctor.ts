@@ -96,11 +96,98 @@ function groupsWithMoreThanOneScope<Key>(entries: { scope: string; key: Key }[])
   return grouped;
 }
 
+type PatternEntry = { scope: string; pattern: string; length: number };
+
+function globPatternsOverlap(left: string, right: string): boolean {
+  const states: [number, number][] = [[0, 0]];
+  const seen = new Set<string>();
+  let overlaps = false;
+  for (let index = 0; index < states.length; index++) {
+    const state = states[index]!;
+    const leftIndex = state[0];
+    const rightIndex = state[1];
+    const key = `${leftIndex}:${rightIndex}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      if (leftIndex === left.length && rightIndex === right.length) {
+        overlaps = true;
+      }
+      if (leftIndex < left.length && left[leftIndex] === "*") {
+        states.push([leftIndex + 1, rightIndex]);
+      }
+      if (rightIndex < right.length && right[rightIndex] === "*") {
+        states.push([leftIndex, rightIndex + 1]);
+      }
+      if (leftIndex < left.length && rightIndex < right.length) {
+        const leftCharacter = left[leftIndex]!;
+        const rightCharacter = right[rightIndex]!;
+        if (leftCharacter === "*" && rightCharacter !== "*") {
+          states.push([leftIndex, rightIndex + 1]);
+        }
+        if (leftCharacter !== "*" && rightCharacter === "*") {
+          states.push([leftIndex + 1, rightIndex]);
+        }
+        if (leftCharacter !== "*" && rightCharacter !== "*" && leftCharacter === rightCharacter) {
+          states.push([leftIndex + 1, rightIndex + 1]);
+        }
+      }
+    }
+  }
+  return overlaps;
+}
+
+function patternsOverlap(left: string, right: string): boolean {
+  const leftSegments = left.split("/");
+  const rightSegments = right.split("/");
+  const segmentCount = Math.min(leftSegments.length, rightSegments.length);
+  let overlaps = true;
+  for (let index = 0; index < segmentCount; index++) {
+    const leftSegment = leftSegments[index]!;
+    const rightSegment = rightSegments[index]!;
+    if (!globPatternsOverlap(leftSegment, rightSegment)) {
+      overlaps = false;
+    }
+  }
+  return overlaps;
+}
+
 function ambiguousLengthFindings(scopes: Scope[]): ConfigFinding[] {
-  const entries = scopes.flatMap((scope) => scope.patterns.map((pattern) => ({ scope: scope.name, key: normalizePattern(pattern).length })));
-  const grouped = groupsWithMoreThanOneScope(entries);
+  const entries: PatternEntry[] = [];
+  for (const scope of scopes) {
+    for (const pattern of scope.patterns) {
+      const normalized = normalizePattern(pattern);
+      entries.push({ scope: scope.name, pattern: normalized, length: normalized.length });
+    }
+  }
+  const grouped = new Map<number, PatternEntry[]>();
+  for (const entry of entries) {
+    const group = grouped.get(entry.length);
+    if (group) {
+      group.push(entry);
+    } else {
+      grouped.set(entry.length, [entry]);
+    }
+  }
   const lengths = [...grouped.keys()].sort((left, right) => left - right);
-  return lengths.map((length) => ({ kind: "ambiguousLength" as const, scopes: grouped.get(length)!.slice().sort(ascendingName), length }));
+  const findings: ConfigFinding[] = [];
+  for (const length of lengths) {
+    const entriesAtLength = grouped.get(length)!;
+    const names = new Set<string>();
+    for (let leftIndex = 0; leftIndex < entriesAtLength.length; leftIndex++) {
+      const left = entriesAtLength[leftIndex]!;
+      for (let rightIndex = leftIndex + 1; rightIndex < entriesAtLength.length; rightIndex++) {
+        const right = entriesAtLength[rightIndex]!;
+        if (left.scope !== right.scope && patternsOverlap(left.pattern, right.pattern)) {
+          names.add(left.scope);
+          names.add(right.scope);
+        }
+      }
+    }
+    if (names.size > 0) {
+      findings.push({ kind: "ambiguousLength", scopes: [...names].sort(ascendingName), length });
+    }
+  }
+  return findings;
 }
 
 function duplicateDirectoryFindings(scopes: Scope[]): ConfigFinding[] {

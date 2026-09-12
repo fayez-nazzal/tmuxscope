@@ -1,18 +1,27 @@
 import { expect, test } from "bun:test";
 import { configReport } from "../src/doctor.ts";
+import { normalizePattern } from "../src/resolve.ts";
 import type { Scope } from "../src/scopes.ts";
 
 function alwaysExists(): boolean {
   return true;
 }
 
-test("two scopes with equal-length patterns are flagged ambiguous", () => {
+test("configReport does not flag equal-length disjoint wildcard patterns", () => {
   const scopes: Scope[] = [
-    { name: "eq1", patterns: ["/w/eqaaaaa"] },
-    { name: "eq2", patterns: ["/w/eqbbbbb"] },
+    { name: "feos", patterns: ["~/rayyan/rayyan-feos*"] },
+    { name: "ruby", patterns: ["~/rayyan/rayyan-ruby*"] },
+  ];
+  expect(configReport(scopes, { exists: alwaysExists })).toEqual([]);
+});
+
+test("configReport flags equal-length overlapping wildcard patterns", () => {
+  const scopes: Scope[] = [
+    { name: "zeta", patterns: ["~/rayyan/rayyan-fe*os*"] },
+    { name: "alpha", patterns: ["~/rayyan/rayyan-f*eos*"] },
   ];
   expect(configReport(scopes, { exists: alwaysExists })).toEqual([
-    { kind: "ambiguousLength", scopes: ["eq1", "eq2"], length: 10 },
+    { kind: "ambiguousLength", scopes: ["alpha", "zeta"], length: normalizePattern("~/rayyan/rayyan-fe*os*").length },
   ]);
 });
 
